@@ -1,0 +1,16 @@
+# BigWigs packager: the zip is the addon folder "WandererAuction", the changelog of the
+# version is CHANGELOG.md (written at each release from the full changelog).
+package-as: WandererAuction
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - README.md
+
+# Shown on CurseForge: Wanderer Auction needs Wanderer, and pairs with Wanderer Bags.
+required-dependencies:
+  - wanderer
+optional-dependencies:
+  - wanderer-bags
