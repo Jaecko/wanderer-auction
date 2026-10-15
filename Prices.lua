@@ -10,11 +10,20 @@ local W = Wanderer
 local U = W and W.Util
 
 local HOUR, DAY = 3600, 86400
+local KEPT = 30 * DAY -- a price older than this says nothing more: let go
 
+local db
 local function DB()
+	if db then return db end
 	WandererAuctionDB = WandererAuctionDB or {}
 	WandererAuctionDB.prices = WandererAuctionDB.prices or {}
-	return WandererAuctionDB
+	db = WandererAuctionDB
+	-- The old prices let go once a session (the file read at login stays small).
+	local now = time()
+	for id, seen in pairs(db.prices) do
+		if type(seen) ~= "table" or now - (seen.time or 0) > KEPT then db.prices[id] = nil end
+	end
+	return db
 end
 ns.DB = DB
 
@@ -81,6 +90,43 @@ local function ItemID(link)
 	return link and tonumber(link:match("item:(%d+)"))
 end
 
+-- The shopping list ------------------------------------------------------------------------------
+
+-- What you want to buy: item id -> { count, note (what for), time }. For the whole account.
+function ns.Shopping()
+	local saved = DB()
+	saved.shopping = type(saved.shopping) == "table" and saved.shopping or {}
+	return saved.shopping
+end
+
+local function ItemName(id)
+	local name = U.Clean(U.Safe(C_Item and C_Item.GetItemNameByID or GetItemInfo, id))
+	return name or ("#" .. id)
+end
+
+-- An item added (or how many raised): said once.
+function ns.AddToShopping(id, count, note)
+	id, count = tonumber(id), math.max(1, tonumber(count) or 1)
+	if not id then return false end
+	local list = ns.Shopping()
+	local entry = list[id]
+	if entry then
+		entry.count = math.max(entry.count or 1, count)
+	else
+		list[id] = { count = count, note = type(note) == "string" and note or nil, time = time() }
+	end
+	if W.Print then W.Print(L.SHOPPING_ADDED:format(ItemName(id))) end
+	if ns.RefreshShopping then ns.RefreshShopping() end
+	return true
+end
+
+function ns.RemoveFromShopping(id)
+	local list = ns.Shopping()
+	if not list[id] then return end
+	list[id] = nil
+	if W.Print then W.Print(L.SHOPPING_REMOVED:format(ItemName(id))) end
+end
+
 -- For the other addons (Wanderer Bags): the price of an item by its link, and its age in days.
 WandererAuction = {
 	Price = function(link)
@@ -88,19 +134,25 @@ WandererAuction = {
 		return price, age and math.floor(age / DAY) or nil
 	end,
 	-- A name searched at the auction house (open), in the window's buying page.
-	Search = function(text) if ns.SearchFor then ns.SearchFor(text) end end,
+	Search = function(text) if ns.SearchFor then return ns.SearchFor(text) end end,
+	-- The auction house open, in Wanderer's window.
+	IsOpen = function() return ns.IsShown and ns.IsShown() or false end,
+	-- The shopping list: an item to buy (how many, what for), one known.
+	AddToShopping = function(id, count, note) return ns.AddToShopping(id, count, note) end,
+	InShopping = function(id) return ns.Shopping()[tonumber(id) or -1] ~= nil end,
 }
 
 -- Over an item, its price at the auction house (only without Auctionator: it says it already).
 function ns.InitTooltip()
 	if not (TooltipDataProcessor and Enum and Enum.TooltipDataType and Enum.TooltipDataType.Item) then return end
 	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
+		-- (the price first: most items have none, nothing more asked then)
+		local price, age = ns.Price(type(data) == "table" and U.Clean(data.id))
+		if not price then return end
 		local settings = ns.Settings()
 		if not (settings and settings.tooltip) or type(Auctionator) == "table" or InCombatLockdown() then return end
 		local name = tooltip.GetName and U.Clean(U.Safe(tooltip.GetName, tooltip)) or ""
 		if name:find("^ShoppingTooltip") or name:find("^ItemRefShoppingTooltip") then return end
-		local price, age = ns.Price(type(data) == "table" and U.Clean(data.id))
-		if not price then return end
 		tooltip:AddLine(L.TOOLTIP_LINE:format(U.Coins(price), ns.Age(age)), 0.62, 0.74, 0.86)
 		tooltip:Show()
 	end)

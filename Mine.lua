@@ -71,7 +71,7 @@ local function ShowChosen()
 	detail.name:SetText(entry.link or entry.name)
 	local lines = {}
 	if entry.buyout then lines[#lines + 1] = L.BUYOUT_LINE:format(U.Coins(entry.buyout)) end
-	if entry.bid then lines[#lines + 1] = L.BID_LINE:format(U.Coins(entry.bid)) .. (entry.bidder and (" (" .. entry.bidder .. ")") or "") end
+	if entry.bid then lines[#lines + 1] = L.BID_LINE:format(U.Coins(entry.bid)) .. (entry.bidderName and (" (" .. entry.bidderName .. ")") or "") end
 	if entry.sold then
 		lines[#lines + 1] = "|cff66dd66" .. L.SOLD_MAIL .. "|r"
 	else
@@ -98,6 +98,14 @@ local function Choose(entry)
 	Draw()
 end
 
+-- A bidder's name (the game gives who it is, not how they are called).
+local function Bidder(guid)
+	guid = Clean(guid)
+	if not (guid and GetPlayerInfoByGUID) then return nil end
+	local _, _, _, _, _, name = Safe(GetPlayerInfoByGUID, guid)
+	return Clean(name)
+end
+
 local function Read()
 	entries = {}
 	local owned = Safe(AH.GetOwnedAuctions)
@@ -107,7 +115,7 @@ local function Read()
 		if id then
 			local entry = { auctionID = Clean(info.auctionID), key = key, id = id, link = Clean(info.itemLink), name = "",
 				quality = 1, quantity = Clean(info.quantity) or 1, buyout = Clean(info.buyoutAmount), bid = Clean(info.bidAmount),
-				bidder = Clean(info.bidder), timeLeft = Clean(info.timeLeft), sold = Clean(info.status) == SOLD }
+				bidderName = Bidder(info.bidder), timeLeft = Clean(info.timeLeft), sold = Clean(info.status) == SOLD }
 			ns.Describe(entry)
 			entries[#entries + 1] = entry
 		end

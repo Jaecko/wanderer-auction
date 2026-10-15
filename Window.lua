@@ -11,6 +11,7 @@ local L = ns.L
 
 local W = Wanderer
 local U = W and W.Util
+local unpack = unpack or rawget(table, "unpack") -- (the game has the first, the tests the second)
 
 ns.WIDTH = 700
 ns.ROW_HEIGHT = 22
@@ -42,6 +43,7 @@ function ns.AddPage(name, label, build, onShow, onClose)
 end
 
 function ns.IsShown() return window and window:IsShown() or false end
+function ns.AtAuction() return atAuction end
 
 function ns.ShowPage(name)
 	current = name
@@ -57,16 +59,27 @@ end
 
 -- The game's window: out of sight while Wanderer's is used (still open: the auction house with it),
 -- back in its place otherwise.
+-- (where the game had placed it, put back as it was: none of the game's placing called from here)
+local placed
 local function PlaceGameWindow()
 	local frame = _G.AuctionHouseFrame
 	if not frame then return end
 	if atAuction and mode == "wanderer" then
+		local _, _, _, x = frame:GetPoint(1)
+		if x ~= OFF_SCREEN then
+			placed = {}
+			for index = 1, frame:GetNumPoints() do placed[index] = { frame:GetPoint(index) } end
+		end
 		frame:SetAlpha(0)
 		frame:ClearAllPoints()
 		frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", OFF_SCREEN, 0)
 	elseif (frame:GetAlpha() or 1) < 1 then
 		frame:SetAlpha(1)
-		if UpdateUIPanelPositions then pcall(UpdateUIPanelPositions, frame) end
+		if placed and placed[1] then
+			frame:ClearAllPoints()
+			for _, point in ipairs(placed) do frame:SetPoint(unpack(point)) end
+		end
+		placed = nil
 	end
 end
 
@@ -104,16 +117,16 @@ function ns.UseGame()
 	if reopen then reopen:Show() end
 end
 
--- Wanderer's window, the game's out of sight.
-function ns.UseWanderer()
+-- Wanderer's window, the game's out of sight (on a page, else the last one).
+function ns.UseWanderer(page)
 	mode = "wanderer"
 	if reopen then reopen:Hide() end
 	PlaceGameWindow()
-	ns.Open()
+	ns.Open(page)
 end
 
 function Create()
-	window = W.Skin.CreateWindow("WandererAuctionSell", "HIGH") -- (not "WandererAuction": the prices shared with the other addons)
+	window = W.Skin.CreateWindow("WandererAuctionWindow", "HIGH") -- (not "WandererAuction": the prices shared with the other addons)
 	W.Skin.Dress(window, { "TOPLEFT", UIParent, "TOPLEFT", 24, -110 }, "auctionWindow")
 	local margin = W.Skin.Margin() + 8
 	window:SetSize(ns.WIDTH, 92 + TABS_HEIGHT + ns.ROWS * ns.ROW_HEIGHT)
@@ -154,9 +167,10 @@ function Create()
 		self:SetScale(W.Skin.Scale())
 		ns.ShowPage(current)
 	end)
-	-- Closed by hand (its cross, Escape): the auction house with it, as the game's window does.
-	window:HookScript("OnHide", function()
-		if switching or not atAuction or mode ~= "wanderer" then return end
+	-- Closed by hand (its cross, Escape): the auction house with it, as the game's window does (not when
+	-- the whole interface is hidden, Alt+Z: it is still shown then).
+	window:HookScript("OnHide", function(self)
+		if switching or self:IsShown() or not atAuction or mode ~= "wanderer" then return end
 		U.Safe(ns.AH.CloseAuctionHouse)
 	end)
 	W.Skin.Get(window):Layout()
@@ -170,6 +184,9 @@ end
 
 function ns.Close()
 	atAuction = false
+	-- A question left open answers nothing once the auction house is gone.
+	if StaticPopup_Hide then StaticPopup_Hide("WANDERER_AUCTION_ASK") end
+	ns.Hear(false)
 	if window then window:Hide() end
 	PlaceGameWindow()
 	if reopen then reopen:Hide() end
@@ -327,11 +344,10 @@ function ns.NewMoney(parent, onChange)
 	return money
 end
 
--- A question before acting (a purchase, a bid, a cancel, a low price): yes does it, no lets it go.
-local asking
+-- A question before acting (a purchase, a bid, a cancel, a low price): yes does it, no lets it go. Each
+-- question goes with its own popup (another one asked in its place does not answer it).
 function ns.Ask(text, accept, refuse)
-	asking = { accept = accept, refuse = refuse }
-	if StaticPopup_Show then StaticPopup_Show("WANDERER_AUCTION_ASK", text) end
+	if StaticPopup_Show then StaticPopup_Show("WANDERER_AUCTION_ASK", text, nil, { accept = accept, refuse = refuse }) end
 end
 
 if StaticPopupDialogs then
@@ -339,14 +355,11 @@ if StaticPopupDialogs then
 		text = "%s",
 		button1 = YES or "Yes",
 		button2 = NO or "No",
-		OnAccept = function()
-			local question = asking
-			asking = nil
+		OnAccept = function(_, question)
 			if question and question.accept then question.accept() end
 		end,
-		OnCancel = function()
-			local question = asking
-			asking = nil
+		OnCancel = function(_, question, reason)
+			if reason == "override" then return end
 			if question and question.refuse then question.refuse() end
 		end,
 		timeout = 0,
@@ -428,11 +441,17 @@ ns.VALUE_LEFT = 96
 -- Init ----------------------------------------------------------------------------------------
 
 local events = CreateFrame("Frame")
-ns.Events = {} -- event -> handlers of the pages
+ns.Events = {} -- event -> handlers of the pages (heard only while the auction house is open)
 function ns.Listen(event, handler)
 	ns.Events[event] = ns.Events[event] or {}
 	table.insert(ns.Events[event], handler)
-	pcall(events.RegisterEvent, events, event)
+end
+
+-- The pages' events: heard at the auction house, let go when it closes.
+function ns.Hear(on)
+	for event in pairs(ns.Events) do
+		pcall(on and events.RegisterEvent or events.UnregisterEvent, events, event)
+	end
 end
 
 -- A page's handler: its error reported by the game without stopping the others (outside the game, raised).
@@ -445,6 +464,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 	if event == "AUCTION_HOUSE_SHOW" then
 		if not ns.On() then return end
 		atAuction = true
+		ns.Hear(true)
 		mode = ns.Settings().replace and "wanderer" or "game"
 		-- The game's window comes with this same event: placed now if it is there, else a moment later.
 		local function Place()

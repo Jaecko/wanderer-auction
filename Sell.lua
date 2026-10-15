@@ -30,9 +30,10 @@ local function Marks() return type(WandererBagsMarks) == "table" and WandererBag
 local function IsKept(id) return Marks().IsKept and Marks().IsKept(id) or false end
 local function IsForAuction(id) return Marks().IsForAuction and Marks().IsForAuction(id) or false end
 
--- Everything your bags can sell here: a commodity once (all its stacks), an item each.
+-- Everything your bags can sell here: a commodity once (all its stacks), identical items once (the same
+-- link: posted together), each in its slots.
 local function Read()
-	local found, commodities = {}, {}
+	local found, commodities, items = {}, {}, {}
 	local container = C_Container or {}
 	for _, bag in ipairs(U.BagIDs()) do
 		for slot = 1, Clean(Safe(container.GetContainerNumSlots, bag)) or 0 do
@@ -42,16 +43,18 @@ local function Read()
 			if location and not Clean(info.isBound) and not IsKept(id) and Clean(Safe(AH.IsSellItemValid, location, false)) then
 				local commodity = Clean(Safe(AH.GetItemCommodityStatus, location)) == COMMODITY
 				local count = Clean(info.stackCount) or 1
-				local entry = commodity and commodities[id]
+				local link = Clean(info.hyperlink)
+				local entry
+				if commodity then entry = commodities[id] elseif link then entry = items[link] end
 				if entry then
 					entry.count = entry.count + count
+					entry.slots[#entry.slots + 1] = { bag, slot }
 				else
-					local link = Clean(info.hyperlink)
 					entry = { id = id, bag = bag, slot = slot, location = location, link = link, count = count,
 						name = link and link:match("%[(.-)%]") or "", quality = Clean(info.quality) or 1,
-						icon = Clean(info.iconFileID), commodity = commodity, auction = IsForAuction(id) }
+						icon = Clean(info.iconFileID), commodity = commodity, auction = IsForAuction(id), slots = { { bag, slot } } }
 					found[#found + 1] = entry
-					if commodity then commodities[id] = entry end
+					if commodity then commodities[id] = entry elseif link then items[link] = entry end
 				end
 			end
 		end
@@ -124,7 +127,7 @@ end
 
 local function Quantity()
 	local most = 1
-	if selected and selected.commodity then most = Clean(Safe(AH.GetAvailablePostCount, selected.location)) or selected.count end
+	if selected then most = math.min(Clean(Safe(AH.GetAvailablePostCount, selected.location)) or selected.count, selected.count) end
 	return math.max(1, math.min(most, tonumber(detail.quantity:GetText()) or 1)), most
 end
 
@@ -195,9 +198,18 @@ local function Search()
 		Query(selected)
 		return
 	end
+	-- One look at a time: the next when this one is answered (or, unanswered, a moment later).
+	if scanning then return end
 	local entry = table.remove(queue, 1)
 	if entry and Query(entry) then
-		scanning = { id = entry.id, commodity = entry.commodity, key = entry.key }
+		local this = { id = entry.id, commodity = entry.commodity, key = entry.key }
+		scanning = this
+		C_Timer.After(5, function()
+			if scanning == this then
+				scanning = nil
+				Search()
+			end
+		end)
 	elseif entry then
 		Search()
 	end
@@ -288,8 +300,8 @@ local function Select(entry)
 		detail.remembered:SetText(remembered and L.REMEMBERED:format(U.Coins(remembered), ns.Age(age)) or "")
 		detail.status:SetText(L.SEARCHING)
 		entry.key, entry.offered = nil, nil
-		local quantity, most = Quantity()
-		detail.quantity:SetText(tostring(entry.commodity and most or quantity))
+		local _, most = Quantity()
+		detail.quantity:SetText(tostring(most))
 		detail.quantityMax:SetText("/ " .. most)
 		detail.duration = nil
 		local copper = ns.CopperOnly()
@@ -314,7 +326,7 @@ local function Refresh()
 	if selected then
 		local still
 		for _, entry in ipairs(entries) do
-			if entry.id == selected.id and (selected.commodity or (entry.bag == selected.bag and entry.slot == selected.slot)) then
+			if entry.id == selected.id and (selected.commodity or entry.link == selected.link) then
 				still = entry
 			end
 		end
@@ -342,8 +354,7 @@ local function Post()
 	if selected.commodity then
 		needsConfirmation = Safe(AH.PostCommodity, location, duration, quantity, buyout)
 	else
-		needsConfirmation = Safe(AH.PostItem, location, duration, quantity, bid > 0 and bid * quantity or nil,
-			buyout > 0 and buyout * quantity or nil)
+		needsConfirmation = Safe(AH.PostItem, location, duration, quantity, bid > 0 and bid or nil, buyout > 0 and buyout or nil)
 	end
 	posting = { name = selected.link or selected.name, quantity = quantity, unit = buyout > 0 and buyout or bid, bid = bid,
 		buyout = buyout, id = selected.id, commodity = selected.commodity, location = location, duration = duration }
@@ -357,8 +368,8 @@ function Confirm()
 	if sale.commodity then
 		Safe(AH.ConfirmPostCommodity, sale.location, sale.duration, sale.quantity, sale.buyout)
 	else
-		Safe(AH.ConfirmPostItem, sale.location, sale.duration, sale.quantity, sale.bid > 0 and sale.bid * sale.quantity or nil,
-			sale.buyout > 0 and sale.buyout * sale.quantity or nil)
+		Safe(AH.ConfirmPostItem, sale.location, sale.duration, sale.quantity, sale.bid > 0 and sale.bid or nil,
+			sale.buyout > 0 and sale.buyout or nil)
 	end
 end
 
@@ -435,11 +446,12 @@ function ns.SellLocation(location)
 	if not (location and location.GetBagAndSlot) then return end
 	local bag, slot = location:GetBagAndSlot()
 	if not (bag and slot) then return end
-	local id = Clean(Safe(C_Container and C_Container.GetContainerItemID, bag, slot))
 	ns.Open("sell")
 	for _, entry in ipairs(entries) do
-		if not entry.header and ((entry.bag == bag and entry.slot == slot) or (entry.commodity and entry.id == id)) then
-			return Select(entry)
+		if not entry.header then
+			for _, place in ipairs(entry.slots or {}) do
+				if place[1] == bag and place[2] == slot then return Select(entry) end
+			end
 		end
 	end
 end
@@ -468,7 +480,9 @@ ns.Listen("ITEM_SEARCH_RESULTS_UPDATED", function(key)
 end)
 ns.Listen("AUCTION_HOUSE_AUCTION_CREATED", function()
 	if posting then
-		if posting.buyout > 0 then ns.Remember(posting.id, posting.buyout) end
+		-- (yours taken as the price only when none lower was seen: above the market, it is not the market's)
+		local seen = ns.Price(posting.id)
+		if posting.buyout > 0 and not (seen and seen < posting.buyout) then ns.Remember(posting.id, posting.buyout) end
 		if W.Print then W.Print(L.POSTED:format(posting.name, posting.quantity, U.Coins(posting.unit))) end
 		posting = nil
 	end

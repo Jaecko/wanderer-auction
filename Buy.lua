@@ -25,6 +25,9 @@ local detail, links = {}, {}
 local pendingSearch, pendingQuery -- waiting for the auction house to be ready
 local buying -- a commodity's purchase under way: { id, quantity, name }
 local category -- the game's category chosen (its filters), or nil for all
+local shopping = false -- the results are the shopping list's
+local DrawResults -- (below)
+local pendingShopping = false -- its search waiting for the auction house to be ready
 
 local function Ready() return Clean(Safe(AH.IsThrottledMessageSystemReady)) and true or false end
 
@@ -70,19 +73,63 @@ local function Browse(text)
 		pendingSearch = text
 		return
 	end
-	pendingSearch = nil
+	pendingSearch, shopping = nil, false
 	detail.listStatus:SetText(L.SEARCHING)
 	Safe(AH.SendBrowseQuery, Query(text))
 end
 
 local function Favorites()
 	if not Ready() then return end
+	shopping = false
 	detail.listStatus:SetText(L.SEARCHING)
 	Safe(AH.SearchForFavorites, Sorts())
 end
 
+-- The shopping list: what you already carry enough of leaves it; the rest searched at once.
+local function ShoppingCount()
+	local count = 0
+	for _ in pairs(ns.Shopping()) do count = count + 1 end
+	return count
+end
+
+local function ShoppingLabel()
+	local count = ShoppingCount()
+	return count > 0 and L.SHOPPING_COUNT:format(count) or L.SHOPPING
+end
+
+local function Shopping()
+	local keys = {}
+	for id, entry in pairs(ns.Shopping()) do
+		local have = Clean(Safe(C_Item and C_Item.GetItemCount or GetItemCount, id)) or 0
+		if have >= (entry.count or 1) then
+			ns.RemoveFromShopping(id)
+		else
+			local key = Safe(AH.MakeItemKey, id)
+			if key then keys[#keys + 1] = key end
+		end
+	end
+	if links.shopping then links.shopping:SetLabel(ShoppingLabel()) end
+	shopping = true
+	if not keys[1] then
+		results = {}
+		detail.listStatus:SetText(L.SHOPPING_EMPTY)
+		if list then DrawResults() end
+		return
+	end
+	if not Ready() then
+		pendingShopping = true
+		return
+	end
+	pendingShopping = false
+	detail.listStatus:SetText(L.SEARCHING)
+	Safe(AH.SearchForItemKeys, keys, Sorts())
+end
+function ns.RefreshShopping()
+	if links.shopping then links.shopping:SetLabel(ShoppingLabel()) end
+end
+
 local asked = false -- the rest of the results asked, not come yet
-local function DrawResults()
+function DrawResults()
 	if not (list and list:IsVisible()) then return end
 	local offset = list:Clamp(#results)
 	for index, row in ipairs(list.rows) do
@@ -112,7 +159,29 @@ local function ReadResults()
 			results[#results + 1] = entry
 		end
 	end
-	detail.listStatus:SetText(results[1] and "" or L.SEARCH_NONE)
+	-- The shopping list: what is not on sale now, said.
+	if shopping then
+		local missing, shown = {}, {}
+		for _, entry in ipairs(results) do shown[entry.id] = true end
+		for id in pairs(ns.Shopping()) do
+			if not shown[id] then
+				missing[#missing + 1] = Clean(Safe(C_Item and C_Item.GetItemNameByID or GetItemInfo, id)) or ("#" .. id)
+			end
+		end
+		detail.listStatus:SetText(missing[1] and L.SHOPPING_MISSING:format(table.concat(missing, ", ")) or "")
+		-- (under the results when some came, else in their place)
+		detail.listStatus:ClearAllPoints()
+		if results[1] then
+			detail.listStatus:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 0, -4)
+			detail.listStatus:SetPoint("RIGHT", list, "RIGHT", 0, 0)
+		else
+			detail.listStatus:SetPoint("TOP", list, "TOP", 0, -20)
+		end
+	else
+		detail.listStatus:ClearAllPoints()
+		detail.listStatus:SetPoint("TOP", list, "TOP", 0, -20)
+		detail.listStatus:SetText(results[1] and "" or L.SEARCH_NONE)
+	end
 	DrawResults()
 end
 
@@ -124,7 +193,9 @@ local function Look()
 		return
 	end
 	pendingQuery = false
-	Safe(AH.SendSearchQuery, chosen.key, Sorts(), true)
+	-- (by price whatever the list's order: the first one is the cheapest)
+	local order = Enum.AuctionHouseSortOrder
+	Safe(AH.SendSearchQuery, chosen.key, { { sortOrder = order.Price, reverseSort = false }, { sortOrder = order.Name, reverseSort = false } }, true)
 end
 
 -- A commodity ---------------------------------------------------------------------------------
@@ -237,9 +308,16 @@ local function ShowItem()
 end
 
 local function Choose(entry, mouse)
-	-- A right click: a favorite, or one no more.
+	-- A right click: off the shopping list (shown), else a favorite or one no more.
 	if mouse == "RightButton" then
-		if entry then
+		if entry and shopping then
+			ns.RemoveFromShopping(entry.id)
+			ns.RefreshShopping()
+			for index, result in ipairs(results) do
+				if result == entry then table.remove(results, index) break end
+			end
+			DrawResults()
+		elseif entry then
 			entry.favorite = not entry.favorite
 			Safe(AH.SetFavoriteItem, entry.key, entry.favorite)
 			DrawResults()
@@ -387,6 +465,8 @@ local function Build(page)
 	links.filters:SetPoint("LEFT", links.category, "RIGHT", 2, 0)
 	links.favorites = W.Skin.CreateLink(page, L.FAVORITES, Favorites, L.FAVORITES_DESC)
 	links.favorites:SetPoint("LEFT", links.filters, "RIGHT", 2, 0)
+	links.shopping = W.Skin.CreateLink(page, ShoppingLabel(), Shopping, L.SHOPPING_DESC)
+	links.shopping:SetPoint("LEFT", links.favorites, "RIGHT", 2, 0)
 	links.sort = W.Skin.CreateLink(page, SortLabel(), function(self)
 		local db = Saved()
 		for index, name in ipairs(SORTS) do
@@ -476,25 +556,30 @@ end
 
 local function Shown()
 	DrawResults()
+	-- Something to buy and nothing searched yet: the shopping list, searched at once.
+	if not results[1] and (box:GetText() or "") == "" and not category and ShoppingCount() > 0 then return Shopping() end
 	if box and (box:GetText() or "") == "" and not category then box:SetFocus() end
 end
 
 local function Closed()
 	Choose(nil)
-	results, buying = {}, nil
+	results, buying, shopping = {}, nil, false
 	pendingSearch, pendingQuery = nil, false
 end
 
 ns.AddPage("buy", L.BUY, Build, Shown, Closed)
 
--- From another addon (Wanderer Bags): this name searched at once.
+-- From another addon (Wanderer Bags): this name searched at once (at the auction house, Wanderer's
+-- window in use; true when done).
 function ns.SearchFor(text)
-	ns.Open("buy")
+	if not (ns.AtAuction() and ns.On()) then return false end
+	if ns.IsShown() then ns.Open("buy") else ns.UseWanderer("buy") end
 	if box then
 		box:SetText(text or "")
 		box:ClearFocus()
 	end
 	Browse(text)
+	return true
 end
 
 if hooksecurefunc and ChatEdit_InsertLink then
@@ -515,7 +600,7 @@ local function Again()
 end
 
 ns.Listen("AUCTION_HOUSE_THROTTLED_SYSTEM_READY", function()
-	if pendingSearch then Browse(pendingSearch) elseif pendingQuery then Look() end
+	if pendingSearch then Browse(pendingSearch) elseif pendingShopping then Shopping() elseif pendingQuery then Look() end
 end)
 ns.Listen("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", function() if list and list:IsVisible() then ReadResults() end end)
 ns.Listen("AUCTION_HOUSE_BROWSE_RESULTS_ADDED", function() if list and list:IsVisible() then ReadResults() end end)
