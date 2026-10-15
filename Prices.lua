@@ -86,9 +86,7 @@ function ns.MerchantLine(link, unit)
 	return "\n" .. color .. L.MERCHANT_GIVES:format(U.Coins(vendor)) .. "|r"
 end
 
-local function ItemID(link)
-	return link and tonumber(link:match("item:(%d+)"))
-end
+local ItemID = U.ItemID
 
 -- The shopping list ------------------------------------------------------------------------------
 
@@ -99,13 +97,11 @@ function ns.Shopping()
 	return saved.shopping
 end
 
-local function ItemName(id)
-	local name = U.Clean(U.Safe(C_Item and C_Item.GetItemNameByID or GetItemInfo, id))
-	return name or ("#" .. id)
-end
+-- An item's name, or its number while the game has not sent it.
+local function ItemName(id) return U.ItemName(id) or ("#" .. id) end
 
--- An item added (or how many raised): said once.
-function ns.AddToShopping(id, count, note)
+-- An item added (or how many raised): said once (unless the caller says it for several).
+function ns.AddToShopping(id, count, note, quiet)
 	id, count = tonumber(id), math.max(1, tonumber(count) or 1)
 	if not id then return false end
 	local list = ns.Shopping()
@@ -115,7 +111,7 @@ function ns.AddToShopping(id, count, note)
 	else
 		list[id] = { count = count, note = type(note) == "string" and note or nil, time = time() }
 	end
-	if W.Print then W.Print(L.SHOPPING_ADDED:format(ItemName(id))) end
+	if W.Print and not quiet then W.Print(L.SHOPPING_ADDED:format(ItemName(id))) end
 	if ns.RefreshShopping then ns.RefreshShopping() end
 	return true
 end
@@ -125,6 +121,80 @@ function ns.RemoveFromShopping(id)
 	if not list[id] then return end
 	list[id] = nil
 	if W.Print then W.Print(L.SHOPPING_REMOVED:format(ItemName(id))) end
+	if ns.RefreshShopping then ns.RefreshShopping() end
+end
+
+local Carried = U.ItemCount
+
+-- The list as rows for a table (its page at the auction house, its small window): { id, name, link, want,
+-- have, note, keep, max, quality, icon }, by name. A name the game has not sent yet is asked for.
+function ns.ShoppingRows()
+	local rows = {}
+	for id, wanted in pairs(ns.Shopping()) do
+		local name, link, quality = U.ItemInfo(id)
+		name = name or U.ItemName(id)
+		if not name then U.LoadItem(id) end
+		rows[#rows + 1] = { id = id, name = name or ("#" .. id), link = link, want = wanted.count or 1, have = Carried(id),
+			note = wanted.note, keep = wanted.keep or false, max = wanted.max, quality = quality or U.ItemQuality(id) or 1,
+			icon = U.ItemIcon(id) }
+	end
+	table.sort(rows, function(a, b) return a.name < b.name end)
+	return rows
+end
+
+-- How many you want to carry, set by hand (from your bags, the list). Once: what you already carry said,
+-- nothing added then. Always (keep, or a line kept already): it stays on the list, filled up at each merchant.
+function ns.SetShopping(id, count, note, keep)
+	id, count = tonumber(id), tonumber(count)
+	if not (id and count and count > 0) then return false end
+	local list = ns.Shopping()
+	if keep == nil then keep = list[id] and list[id].keep or false end
+	local have = Carried(id)
+	if have >= count and not keep then
+		if W.Print then W.Print(L.SHOPPING_ALREADY:format(have, ItemName(id))) end
+		return false
+	end
+	local entry = list[id] or { time = time() }
+	entry.count, entry.note = count, type(note) == "string" and note or entry.note
+	entry.keep = keep or nil
+	list[id] = entry
+	if W.Print then W.Print((keep and L.SHOPPING_KEEP_SET or L.SHOPPING_SET):format(ItemName(id), count, have)) end
+	if ns.RefreshShopping then ns.RefreshShopping() end
+	if ns.RefreshMerchant then ns.RefreshMerchant() end
+	return true
+end
+
+-- What the list still lacks of an item (0: nothing, or not on it).
+function ns.Lacking(id)
+	local entry = ns.Shopping()[id]
+	if not entry then return 0 end
+	return math.max(0, (entry.count or 1) - Carried(id))
+end
+
+-- "3 / 8" on a row of the list, in green once you carry enough.
+function ns.HaveWant(have, want)
+	local enough = have >= want
+	return (enough and "|cff8fe0a2" or "") .. have .. " / " .. want .. (enough and "|r" or "")
+end
+
+-- What you now carry enough of leaves the list, said (a line always on you stays).
+-- Your bags changed (looted, made, bought anywhere), or the list searched at the auction house.
+function ns.PruneShopping()
+	local list = ns.Shopping()
+	for id, entry in pairs(list) do
+		if not entry.keep and Carried(id) >= (entry.count or 1) then
+			list[id] = nil
+			if W.Print then W.Print(L.SHOPPING_ENOUGH:format(ItemName(id))) end
+		end
+	end
+	if ns.RefreshShopping then ns.RefreshShopping() end
+end
+do
+	local bags = CreateFrame("Frame")
+	pcall(bags.RegisterEvent, bags, "BAG_UPDATE_DELAYED")
+	bags:SetScript("OnEvent", U and U.Debounce and U.Debounce(1, function()
+		if next(ns.Shopping()) then ns.PruneShopping() end
+	end) or nil)
 end
 
 -- For the other addons (Wanderer Bags): the price of an item by its link, and its age in days.
@@ -140,14 +210,33 @@ WandererAuction = {
 	-- The shopping list: an item to buy (how many, what for), one known.
 	AddToShopping = function(id, count, note) return ns.AddToShopping(id, count, note) end,
 	InShopping = function(id) return ns.Shopping()[tonumber(id) or -1] ~= nil end,
+	-- How many you want to carry, set by hand; how many the list wants (nil: not on it); off it.
+	SetShopping = function(id, count, note, keep) return ns.SetShopping(id, count, note, keep) end,
+	-- A line always on you (true), else nil.
+	IsAlways = function(id)
+		local entry = ns.Shopping()[tonumber(id) or -1]
+		return entry and entry.keep or nil
+	end,
+	ShoppingCount = function(id)
+		local entry = ns.Shopping()[tonumber(id) or -1]
+		return entry and entry.count or nil
+	end,
+	RemoveFromShopping = function(id) return ns.RemoveFromShopping(tonumber(id)) end,
 }
 
 -- Over an item, its price at the auction house (only without Auctionator: it says it already).
 function ns.InitTooltip()
 	if not (TooltipDataProcessor and Enum and Enum.TooltipDataType and Enum.TooltipDataType.Item) then return end
 	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
+		local id = type(data) == "table" and U.Clean(data.id)
+		-- On your shopping list: how many you carry, how many it wants.
+		local entry = id and ns.Shopping()[id]
+		if entry and not InCombatLockdown() then
+			tooltip:AddLine((entry.keep and L.TOOLTIP_KEEP or L.TOOLTIP_SHOPPING):format(Carried(id), entry.count or 1), 1, 0.82, 0)
+			tooltip:Show()
+		end
 		-- (the price first: most items have none, nothing more asked then)
-		local price, age = ns.Price(type(data) == "table" and U.Clean(data.id))
+		local price, age = ns.Price(id)
 		if not price then return end
 		local settings = ns.Settings()
 		if not (settings and settings.tooltip) or type(Auctionator) == "table" or InCombatLockdown() then return end

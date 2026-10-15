@@ -1,0 +1,5 @@
+<Bindings>
+	<Binding name="WANDERERAUCTION_LIST" header="WANDERERAUCTION">
+		WandererAuction_ToggleList()
+	</Binding>
+</Bindings>

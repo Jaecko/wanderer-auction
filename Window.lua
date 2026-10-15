@@ -1,30 +1,29 @@
 local ADDON, ns = ...
 local L = ns.L
 
--- The auction house, in Wanderer's window: its pages (to sell, to buy, your
--- auctions, your bids), a link for each under its title; on each, a list on
--- the left and what is chosen on the right. It opens and closes with the
+-- The auction house, in Wanderer's window: four tabs (to sell, to buy, what
+-- you follow, your shopping list), each a table on the left and what is
+-- chosen on the right, one main button per page. It opens and closes with the
 -- auction house, the game's own window then out of sight; a link brings the
--- game's back (and one beside it, Wanderer's). Here too: what the pages share
--- (a row of a list, an amount of money, an item described, a question asked
--- before acting).
+-- game's back (and one beside it, Wanderer's). Its pieces are Wanderer's own
+-- (Wanderer.Skin): the windows of Wanderer and its extensions look alike.
 
 local W = Wanderer
 local U = W and W.Util
-local unpack = unpack or rawget(table, "unpack") -- (the game has the first, the tests the second)
+local Skin = W and W.Skin
 
-ns.WIDTH = 700
-ns.ROW_HEIGHT = 22
-ns.ROWS = 18 -- a page's height, in rows
-ns.LIST_WIDTH = 360
-local GAP = 24 -- between the list and what is chosen
-local TABS_HEIGHT = 24
-local OFF_SCREEN = -10000
+ns.WIDTH, ns.HEIGHT = 1080, 680 -- at first; then as you leave it
+local MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT = 1080, 600, 1700, 1150
+ns.ROW = 34 -- a table's row
+ns.GAP = 20 -- between a table and what is chosen
 
 -- The game's auction house functions, looked up when used.
 ns.AH = setmetatable({}, { __index = function(_, key) return C_AuctionHouse and C_AuctionHouse[key] end })
 
-local window, title, reopen
+-- The auction house takes one query at a time: ready for the next one.
+function ns.Ready() return U.Clean(U.Safe(ns.AH.IsThrottledMessageSystemReady)) and true or false end
+
+local window, reopen, money
 local pages, order = {}, {}
 local current = "sell"
 local atAuction = false -- the auction house open
@@ -36,51 +35,54 @@ function ns.On()
 	return settings and settings.enabled and true or false
 end
 
--- A page: its name, its title, how it is built (once) and what it does when shown and closed.
-function ns.AddPage(name, label, build, onShow, onClose)
-	pages[name] = { label = label, build = build, onShow = onShow, onClose = onClose }
+-- A page: its name, its tab's label, how it is built (once), what it does when shown and closed, and a
+-- count beside its tab (what waits for you there; nil: none) and that count's tone (red by default).
+function ns.AddPage(name, label, build, onShow, onClose, badge, badgeTone)
+	pages[name] = { label = label, build = build, onShow = onShow, onClose = onClose, badge = badge, badgeTone = badgeTone }
 	order[#order + 1] = name
+end
+
+-- An auction's duration (1 to 3), as the game names it (its own words: the durations are its own).
+local DURATION_KEYS, DURATION_HOURS = { "ONE", "TWO", "THREE" }, { 2, 8, 24 }
+function ns.DurationName(index)
+	local name = _G["AUCTION_DURATION_" .. (DURATION_KEYS[index] or "TWO")]
+	return type(name) == "string" and name or L.DURATION:format(DURATION_HOURS[index] or 8)
 end
 
 function ns.IsShown() return window and window:IsShown() or false end
 function ns.AtAuction() return atAuction end
+
+-- The tabs: the page shown underlined in gold; a count beside those where something waits.
+function ns.RefreshTabs()
+	if not window then return end
+	for name, page in pairs(pages) do
+		local tab = page.tab
+		local shown = name == current
+		local color = shown and Skin.COLORS.gold or { 0.72, 0.68, 0.61 }
+		tab.text:SetTextColor(color[1], color[2], color[3])
+		tab.line:SetShown(shown)
+		local count = page.badge and page.badge()
+		tab.badge:Set(count and count > 0 and tostring(count) or nil, page.badgeTone or "red")
+		tab:SetWidth(U.Measure(tab.text, "GetStringWidth", 60) + (tab.badge:IsShown() and tab.badge:GetWidth() + 8 or 0))
+	end
+end
 
 function ns.ShowPage(name)
 	current = name
 	if not window then return end
 	for key, page in pairs(pages) do
 		page.frame:SetShown(key == name)
-		-- The page shown: its link in gold.
-		page.tab:SetLabel(key == name and ("|cffffd100" .. page.label .. "|r") or page.label)
 	end
-	title:SetText(pages[name].label)
+	ns.RefreshTabs()
 	if pages[name].onShow then pages[name].onShow() end
 end
 
--- The game's window: out of sight while Wanderer's is used (still open: the auction house with it),
--- back in its place otherwise.
--- (where the game had placed it, put back as it was: none of the game's placing called from here)
-local placed
+-- The game's window --------------------------------------------------------------------------------
+
+-- Out of sight while Wanderer's is used (still open: the auction house with it), back in its place
+-- otherwise.
 local function PlaceGameWindow()
-	local frame = _G.AuctionHouseFrame
-	if not frame then return end
-	if atAuction and mode == "wanderer" then
-		local _, _, _, x = frame:GetPoint(1)
-		if x ~= OFF_SCREEN then
-			placed = {}
-			for index = 1, frame:GetNumPoints() do placed[index] = { frame:GetPoint(index) } end
-		end
-		frame:SetAlpha(0)
-		frame:ClearAllPoints()
-		frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", OFF_SCREEN, 0)
-	elseif (frame:GetAlpha() or 1) < 1 then
-		frame:SetAlpha(1)
-		if placed and placed[1] then
-			frame:ClearAllPoints()
-			for _, point in ipairs(placed) do frame:SetPoint(unpack(point)) end
-		end
-		placed = nil
-	end
+	U.HideOffScreen(_G.AuctionHouseFrame, atAuction and mode == "wanderer")
 end
 
 -- The game places its windows again and again (another one opened, its tabs): out of sight each time.
@@ -125,46 +127,83 @@ function ns.UseWanderer(page)
 	ns.Open(page)
 end
 
+-- The window ----------------------------------------------------------------------------------------
+
 function Create()
 	window = W.Skin.CreateWindow("WandererAuctionWindow", "HIGH") -- (not "WandererAuction": the prices shared with the other addons)
 	W.Skin.Dress(window, { "TOPLEFT", UIParent, "TOPLEFT", 24, -110 }, "auctionWindow")
-	local margin = W.Skin.Margin() + 8
-	window:SetSize(ns.WIDTH, 92 + TABS_HEIGHT + ns.ROWS * ns.ROW_HEIGHT)
-	local kicker = W.Skin.CreateKicker(window, "Wanderer")
-	kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
-	title = W.Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
-	title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
-	-- The pages' links, in a row under the title.
-	local previous
-	for _, name in ipairs(order) do
-		local page = pages[name]
-		page.tab = W.Skin.CreateLink(window, page.label, function()
-			if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
-			ns.ShowPage(name)
-		end)
-		if previous then
-			page.tab:SetPoint("LEFT", previous, "RIGHT", 4, 0)
-		else
-			page.tab:SetPoint("TOPLEFT", title, "BOTTOMLEFT", -5, -6)
-		end
-		previous = page.tab
-	end
-	-- The game's own window, on the right of the links.
+	local saved = ns.Settings() and ns.Settings().size
+	window:SetSize(Skin.Within(saved and saved[1] or ns.WIDTH, MIN_WIDTH, MAX_WIDTH), Skin.Within(saved and saved[2] or ns.HEIGHT, MIN_HEIGHT, MAX_HEIGHT))
+	local _, _, margin = Skin.Header(window, "Wanderer", L.WINDOW_TITLE, 10, "GameFontNormalLarge")
+	-- Your money, and the game's own window, on the right (the cross after them).
 	local game = W.Skin.CreateLink(window, L.GAME_WINDOW, function()
 		if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
 		ns.UseGame()
 	end, L.GAME_WINDOW_DESC)
-	game:SetPoint("TOP", pages[order[1]].tab, "TOP", 0, 0)
-	game:SetPoint("RIGHT", window, "RIGHT", -margin + 5, 0)
+	game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 26), -margin + 2)
+	money = Skin.Text(window, "GameTooltipText", "soft")
+	money:SetPoint("RIGHT", game, "LEFT", -18, 0)
+	-- The tabs, in a row, the one shown underlined.
+	local rule = Skin.Rule(window)
+	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 68))
+	rule:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+	local previous
+	for _, name in ipairs(order) do
+		local page = pages[name]
+		local tab = CreateFrame("Button", nil, window)
+		tab:SetHeight(30)
+		tab.text = W.Skin.CreateText(tab, "GameFontNormal")
+		tab.text:SetPoint("LEFT")
+		tab.text:SetText(page.label)
+		tab.badge = Skin.Chip(tab)
+		tab.badge:SetPoint("LEFT", tab.text, "RIGHT", 7, 0)
+		tab.line = tab:CreateTexture(nil, "ARTWORK")
+		tab.line:SetColorTexture(1, 0.82, 0, 1)
+		tab.line:SetHeight(2)
+		tab.line:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", 0, -1)
+		tab.line:SetPoint("BOTTOMRIGHT", tab, "BOTTOMRIGHT", 0, -1)
+		tab:SetScript("OnClick", function()
+			if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
+			ns.ShowPage(name)
+		end)
+		if previous then tab:SetPoint("LEFT", previous, "RIGHT", 26, 0) else tab:SetPoint("BOTTOMLEFT", rule, "TOPLEFT", 0, 0) end
+		page.tab = tab
+		previous = tab
+	end
+	-- What is said under it all.
+	local footer = Skin.Text(window, "GameTooltipTextSmall", "muted")
+	footer:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin - 4)
+	footer:SetText(L.FOOTER)
 	for _, name in ipairs(order) do
 		local page = pages[name]
 		page.frame = CreateFrame("Frame", nil, window)
-		page.frame:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -(10 + TABS_HEIGHT))
-		page.frame:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
+		page.frame:SetPoint("TOPLEFT", rule, "BOTTOMLEFT", 0, -14)
+		page.frame:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin + 16)
 		page.build(page.frame)
 	end
+	-- Its corner: dragged, the window grows or shrinks, each page's table with it (page.frame.Fit); its size kept.
+	local function Fit()
+		for _, page in pairs(pages) do
+			local height = page.frame:GetHeight()
+			if page.frame.Fit and height and height > 0 then page.frame:Fit(height) end
+		end
+	end
+	Skin.Resizable(window, {
+		minWidth = MIN_WIDTH, minHeight = MIN_HEIGHT, maxWidth = MAX_WIDTH, maxHeight = MAX_HEIGHT,
+		onResized = function(width, height)
+			if ns.Settings() then ns.Settings().size = { width, height } end
+		end,
+	})
+	window:HookScript("OnSizeChanged", function()
+		local skin = Skin.Get(window)
+		if skin then skin:Layout() end
+		Fit()
+	end)
+	Fit()
 	window:HookScript("OnShow", function(self)
 		self:SetScale(W.Skin.Scale())
+		Fit()
+		ns.ShowMoney()
 		ns.ShowPage(current)
 	end)
 	-- Closed by hand (its cross, Escape): the auction house with it, as the game's window does (not when
@@ -176,6 +215,11 @@ function Create()
 	W.Skin.Get(window):Layout()
 end
 
+-- Your money, at the top.
+function ns.ShowMoney()
+	if money then money:SetText(U.Coins(U.Clean(U.Safe(GetMoney)) or 0)) end
+end
+
 function ns.Open(page)
 	if page then current = page end
 	if not window then Create() end
@@ -185,7 +229,7 @@ end
 function ns.Close()
 	atAuction = false
 	-- A question left open answers nothing once the auction house is gone.
-	if StaticPopup_Hide then StaticPopup_Hide("WANDERER_AUCTION_ASK") end
+	Skin.CancelAsk()
 	ns.Hear(false)
 	if window then window:Hide() end
 	PlaceGameWindow()
@@ -204,170 +248,6 @@ local function Reopen()
 	reopen:Hide()
 end
 
--- Pieces -------------------------------------------------------------------------------------
-
--- A row of a list: icon, name, a count and a price on the right; or a title.
-function ns.NewRow(list, index, onClick)
-	local size = ns.ROW_HEIGHT
-	local row = CreateFrame("Button", nil, list)
-	row:SetHeight(size)
-	row:SetPoint("TOPLEFT", list, "TOPLEFT", 0, -(index - 1) * size)
-	row:SetPoint("RIGHT", list, "RIGHT", 0, 0)
-	row.chosen = row:CreateTexture(nil, "BACKGROUND")
-	row.chosen:SetAllPoints()
-	row.chosen:SetColorTexture(1, 0.82, 0, 0.12)
-	row.chosen:Hide()
-	row.hover = row:CreateTexture(nil, "BACKGROUND", nil, 1)
-	row.hover:SetAllPoints()
-	row.hover:SetColorTexture(1, 1, 1, 0.05)
-	row.hover:Hide()
-	row.icon = row:CreateTexture(nil, "ARTWORK")
-	row.icon:SetSize(size - 4, size - 4)
-	row.icon:SetPoint("LEFT", row, "LEFT", 2, 0)
-	row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	row.price = W.Skin.CreateText(row, "GameTooltipTextSmall", 0.85, 0.85, 0.85)
-	row.price:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-	row.count = W.Skin.CreateText(row, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
-	row.count:SetPoint("RIGHT", row.price, "LEFT", -6, 0)
-	row.name = W.Skin.CreateText(row, "GameTooltipText")
-	row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-	row.name:SetPoint("RIGHT", row.count, "LEFT", -4, 0)
-	if row.name.SetWordWrap then row.name:SetWordWrap(false) end
-	row.header = W.Skin.CreateKicker(row)
-	row.header:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 3)
-	row.star = row:CreateTexture(nil, "OVERLAY")
-	row.star:SetSize(12, 12)
-	row.star:SetPoint("TOPRIGHT", row.icon, "TOPRIGHT", 3, 3)
-	if not pcall(row.star.SetAtlas, row.star, "auctionhouse-icon-favorite") then row.star:SetTexture("Interface\\Common\\FavoritesIcon") end
-	row.star:Hide()
-	row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	row:SetScript("OnClick", function(self, mouse)
-		if self.entry and not self.entry.header then
-			if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
-			onClick(self.entry, mouse)
-		end
-	end)
-	row:SetScript("OnEnter", function(self)
-		if not (self.entry and self.entry.link) then return end
-		self.hover:Show()
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:SetHyperlink(self.entry.link)
-		GameTooltip:Show()
-	end)
-	row:SetScript("OnLeave", function(self)
-		self.hover:Hide()
-		GameTooltip:Hide()
-	end)
-	-- Filled: a title, or an item (name in its quality's color).
-	function row:Fill(entry, chosen, count, price)
-		self.entry = entry
-		self:SetShown(entry ~= nil)
-		if not entry then return end
-		self.star:Hide()
-		local header = entry.header ~= nil
-		self.header:SetShown(header)
-		self.icon:SetShown(not header)
-		self.name:SetShown(not header)
-		self.count:SetShown(not header)
-		self.price:SetShown(not header)
-		self.chosen:SetShown(chosen or false)
-		if header then
-			self.header:SetText(U.Upper(entry.header))
-			return
-		end
-		self.icon:SetTexture(entry.icon)
-		self.name:SetText(entry.name or "")
-		local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[entry.quality or 1]
-		if color then self.name:SetTextColor(color.r, color.g, color.b) else self.name:SetTextColor(1, 1, 1) end
-		self.count:SetText(count or "")
-		self.price:SetText(price or "")
-		self.star:SetShown(entry.favorite or false)
-	end
-	return row
-end
-
--- A list of rows, the wheel scrolling it: list.offset, list.rows.
-function ns.NewList(parent, rows, onClick, onScroll)
-	local list = CreateFrame("Frame", nil, parent)
-	list:SetSize(ns.LIST_WIDTH, rows * ns.ROW_HEIGHT)
-	list:EnableMouseWheel(true)
-	list.offset, list.rows = 0, {}
-	list:SetScript("OnMouseWheel", function(self, delta)
-		self.offset = math.max(0, self.offset - delta * 3)
-		onScroll()
-	end)
-	for index = 1, rows do list.rows[index] = ns.NewRow(list, index, onClick) end
-	-- The offset kept within what there is to show.
-	function list:Clamp(total)
-		self.offset = math.max(0, math.min(self.offset, total - #self.rows))
-		return self.offset
-	end
-	return list
-end
-
--- An amount of money: gold, silver, copper (copper only where the auction house takes it).
-function ns.NewMoney(parent, onChange)
-	local money = CreateFrame("Frame", nil, parent)
-	money:SetSize(170, 22)
-	local function Box(width, icon, anchor)
-		local box = W.Skin.CreateInput(money, nil, 7)
-		box:SetSize(width, 22)
-		box:SetNumeric(true)
-		box:SetJustifyH("RIGHT")
-		box.coin = money:CreateTexture(nil, "ARTWORK")
-		box.coin:SetSize(13, 13)
-		box.coin:SetTexture(icon)
-		box.coin:SetPoint("LEFT", box, "RIGHT", 2, 0)
-		if anchor then box:SetPoint("LEFT", anchor, "RIGHT", 6, 0) else box:SetPoint("LEFT") end
-		box:SetScript("OnTextChanged", function() if onChange then onChange() end end)
-		box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-		box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-		return box
-	end
-	money.gold = Box(54, "Interface\\MoneyFrame\\UI-GoldIcon")
-	money.silver = Box(34, "Interface\\MoneyFrame\\UI-SilverIcon", money.gold.coin)
-	money.copper = Box(34, "Interface\\MoneyFrame\\UI-CopperIcon", money.silver.coin)
-	function money:Set(copper)
-		copper = math.max(0, math.floor(copper or 0))
-		self.gold:SetText(tostring(math.floor(copper / 10000)))
-		self.silver:SetText(tostring(math.floor(copper / 100) % 100))
-		self.copper:SetText(tostring(copper % 100))
-	end
-	function money:Get()
-		local copper = self.copper:IsShown() and (tonumber(self.copper:GetText()) or 0) or 0
-		return (tonumber(self.gold:GetText()) or 0) * 10000 + (tonumber(self.silver:GetText()) or 0) * 100 + copper
-	end
-	function money:ShowCopper(shown)
-		self.copper:SetShown(shown)
-		self.copper.coin:SetShown(shown)
-	end
-	return money
-end
-
--- A question before acting (a purchase, a bid, a cancel, a low price): yes does it, no lets it go. Each
--- question goes with its own popup (another one asked in its place does not answer it).
-function ns.Ask(text, accept, refuse)
-	if StaticPopup_Show then StaticPopup_Show("WANDERER_AUCTION_ASK", text, nil, { accept = accept, refuse = refuse }) end
-end
-
-if StaticPopupDialogs then
-	StaticPopupDialogs.WANDERER_AUCTION_ASK = {
-		text = "%s",
-		button1 = YES or "Yes",
-		button2 = NO or "No",
-		OnAccept = function(_, question)
-			if question and question.accept then question.accept() end
-		end,
-		OnCancel = function(_, question, reason)
-			if reason == "override" then return end
-			if question and question.refuse then question.refuse() end
-		end,
-		timeout = 0,
-		whileDead = true,
-		hideOnEscape = true,
-	}
-end
-
 -- An item by its key: name, quality, icon, link (the game may send them a moment later: false then).
 function ns.Describe(entry)
 	local info = U.Safe(ns.AH.GetItemKeyInfo, entry.key)
@@ -375,8 +255,8 @@ function ns.Describe(entry)
 	entry.name, entry.quality, entry.icon = U.Clean(info.itemName) or "", U.Clean(info.quality) or 1, U.Clean(info.iconFileID)
 	entry.commodity = U.Clean(info.isCommodity) and true or false
 	if not entry.link then
-		local _, link = U.Safe(C_Item and C_Item.GetItemInfo or GetItemInfo, entry.id)
-		entry.link = U.Clean(link)
+		local _, link = U.ItemInfo(entry.id)
+		entry.link = link
 	end
 	return true
 end
@@ -389,56 +269,7 @@ end
 -- Whether the auction house takes copper (else prices in silver).
 function ns.CopperOnly() return U.Clean(U.Safe(ns.AH.SupportsCopperValues)) and true or false end
 
--- On the right of a list: a rule, a hint while nothing is chosen, then the detail of what is: its
--- icon, its name, its status (lines of text). Fills the given table; returns the detail's frame.
-function ns.NewDetail(page, list, hint, detail)
-	local rule = page:CreateTexture(nil, "ARTWORK")
-	rule:SetColorTexture(1, 0.82, 0, 0.2)
-	rule:SetWidth(1)
-	rule:SetPoint("TOPLEFT", list, "TOPRIGHT", GAP / 2, 0)
-	rule:SetPoint("BOTTOM", page, "BOTTOM", 0, 0)
-	local frame = CreateFrame("Frame", nil, page)
-	frame:SetPoint("TOPLEFT", list, "TOPRIGHT", GAP, 0)
-	frame:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", 0, 0)
-	detail.pick = W.Skin.CreateText(page, "GameTooltipText", 0.6, 0.6, 0.6)
-	detail.pick:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -60)
-	detail.pick:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-	detail.pick:SetText(hint)
-	frame:Hide()
-	detail.frame = frame
-	detail.icon = frame:CreateTexture(nil, "ARTWORK")
-	detail.icon:SetSize(32, 32)
-	detail.icon:SetPoint("TOPLEFT")
-	detail.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	detail.name = W.Skin.CreateText(frame, "GameTooltipText")
-	detail.name:SetPoint("TOPLEFT", detail.icon, "TOPRIGHT", 8, -1)
-	detail.name:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-	detail.status = W.Skin.CreateText(frame, "GameTooltipText", 0.9, 0.88, 0.82)
-	detail.status:SetPoint("TOPLEFT", detail.icon, "BOTTOMLEFT", 0, -10)
-	detail.status:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-	detail.status:SetSpacing(3)
-	return frame
-end
-
--- One of the game's buttons, as wide as its words need (at least minimum).
-function ns.Button(parent, text, onClick, minimum)
-	local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	button:SetText(text)
-	button:SetSize(math.max(minimum or 100, U.Measure(button:GetFontString() or button, "GetStringWidth", 80) + 30), 24)
-	button:SetScript("OnClick", onClick)
-	return button
-end
-
--- A label on the left of a line, its value at a fixed place.
-function ns.Label(parent, text, anchor, gap)
-	local label = W.Skin.CreateText(parent, "GameTooltipTextSmall", 0.75, 0.68, 0.5)
-	label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -(gap or 14))
-	label:SetText(text)
-	return label
-end
-ns.VALUE_LEFT = 96
-
--- Init ----------------------------------------------------------------------------------------
+-- Init ------------------------------------------------------------------------------------------------
 
 local events = CreateFrame("Frame")
 ns.Events = {} -- event -> handlers of the pages (heard only while the auction house is open)
@@ -476,6 +307,8 @@ events:SetScript("OnEvent", function(_, event, ...)
 		Place()
 		C_Timer.After(0, function() if atAuction then Place() end end)
 		if mode == "wanderer" then ns.Open() end
+		-- (what you follow, looked at on arrival: the tabs say what waits)
+		if ns.OnArrive then ns.OnArrive() end
 		return
 	elseif event == "AUCTION_HOUSE_CLOSED" then
 		return ns.Close()
@@ -483,14 +316,19 @@ events:SetScript("OnEvent", function(_, event, ...)
 	for _, handler in ipairs(ns.Events[event] or {}) do Run(handler, ...) end
 end)
 
+ns.Listen("PLAYER_MONEY", function() ns.ShowMoney() end)
+
 function ns.Init()
 	if not (W and W.RegisterExtension) then return end
 	-- An older Wanderer: said once, nothing taken.
-	if (W.API or 1) < 2 then return W.Print(L.NEEDS_WANDERER) end
+	if (W.API or 1) < 4 then return W.Print(L.NEEDS_WANDERER) end
 	W.RegisterExtension({
 		key = "auction",
 		title = L.TITLE,
-		defaults = { enabled = true, replace = true, duration = "2", tooltip = true },
+		defaults = { enabled = true, replace = true, duration = "2", tooltip = true, autoBuy = false, buyCap = 5 },
+		ranges = { ["auction.buyCap"] = { 1, 100, 1 } },
+		-- Wanderer's menu: the shopping list, anywhere.
+		launcher = { label = L.SHOPPING, open = function() ns.ToggleList() end },
 		refresh = function()
 			if ns.IsShown() and not ns.On() then ns.Close() end
 		end,
@@ -500,21 +338,22 @@ function ns.Init()
 			local on = o.IsOn("auction", "enabled")
 			o.Under(o.Checkbox("auction", "replace", L.REPLACE, L.REPLACE_DESC), enabled, on)
 			o.Under(o.Dropdown("AUCTION_DURATION", L.DURATION_DEFAULT, L.DURATION_DESC, "2",
-				{ { "1", L.DURATION:format(12) }, { "2", L.DURATION:format(24) }, { "3", L.DURATION:format(48) } },
+				{ { "1", ns.DurationName(1) }, { "2", ns.DurationName(2) }, { "3", ns.DurationName(3) } },
 				function() return ns.Settings() and ns.Settings().duration or "2" end,
 				function(value) if ns.Settings() then ns.Settings().duration = value end end), enabled, on)
 			o.Checkbox("auction", "tooltip", L.TOOLTIP, L.TOOLTIP_DESC)
+			-- At merchants: what the shopping list lacks, bought on arrival (off), never above the cap.
+			local autoBuy = o.Under(o.Checkbox("auction", "autoBuy", L.AUTOBUY, L.AUTOBUY_DESC), enabled, on)
+			o.Under(o.Slider("AUCTION_BUY_CAP", L.AUTOBUY_CAP, "auction.buyCap", function(value) return U.Coins(value * 10000) end),
+				autoBuy, o.IsOn("auction", "autoBuy"))
 		end,
 	})
 	pcall(events.RegisterEvent, events, "AUCTION_HOUSE_SHOW")
 	pcall(events.RegisterEvent, events, "AUCTION_HOUSE_CLOSED")
 	ns.InitTooltip()
+	SLASH_WANDERERAUCTION1 = "/wauction"
+	SlashCmdList.WANDERERAUCTION = function() ns.ToggleList() end
 end
 
-local loader = CreateFrame("Frame")
-loader:RegisterEvent("ADDON_LOADED")
-loader:SetScript("OnEvent", function(self, _, name)
-	if name ~= ADDON then return end
-	self:UnregisterEvent("ADDON_LOADED")
-	ns.Init()
-end)
+-- (an older Wanderer, without it: said once)
+if W and W.WhenLoaded then W.WhenLoaded(ADDON, ns.Init) elseif W and W.Print then W.Print(L.NEEDS_WANDERER) end
