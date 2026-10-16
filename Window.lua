@@ -130,13 +130,13 @@ end
 -- The window ----------------------------------------------------------------------------------------
 
 function Create()
-	window = W.Skin.CreateWindow("WandererAuctionWindow", "HIGH") -- (not "WandererAuction": the prices shared with the other addons)
+	window = W.Skin.CreateWindow("WandererAuctionWindow", "MEDIUM") -- (not "WandererAuction": the prices shared with the other addons)
 	W.Skin.Dress(window, { "TOPLEFT", UIParent, "TOPLEFT", 24, -110 }, "auctionWindow")
 	local saved = ns.Settings() and ns.Settings().size
 	window:SetSize(Skin.Within(saved and saved[1] or ns.WIDTH, MIN_WIDTH, MAX_WIDTH), Skin.Within(saved and saved[2] or ns.HEIGHT, MIN_HEIGHT, MAX_HEIGHT))
 	local _, _, margin = Skin.Header(window, "Wanderer", L.WINDOW_TITLE, 10, "GameFontNormalLarge")
 	-- Your money, and the game's own window, on the right (the cross after them).
-	local game = W.Skin.CreateLink(window, L.GAME_WINDOW, function()
+	local game = (W.Skin.SmallButton or W.Skin.CreateLink)(window, L.GAME_WINDOW, function()
 		if U.PlaySound then U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
 		ns.UseGame()
 	end, L.GAME_WINDOW_DESC)
@@ -242,7 +242,7 @@ end
 -- The link beside the game's window, back to Wanderer's.
 local function Reopen()
 	if reopen or not _G.AuctionHouseFrame then return end
-	reopen = W.Skin.CreateLink(UIParent, L.TITLE, function() ns.UseWanderer() end)
+	reopen = (W.Skin.SmallButton or W.Skin.CreateLink)(UIParent, L.TITLE, function() ns.UseWanderer() end)
 	reopen:SetFrameStrata("HIGH")
 	reopen:SetPoint("TOPLEFT", _G.AuctionHouseFrame, "TOPRIGHT", 6, -4)
 	reopen:Hide()
@@ -321,12 +321,14 @@ ns.Listen("PLAYER_MONEY", function() ns.ShowMoney() end)
 function ns.Init()
 	if not (W and W.RegisterExtension) then return end
 	-- An older Wanderer: said once, nothing taken.
-	if (W.API or 1) < 4 then return W.Print(L.NEEDS_WANDERER) end
+	if (W.API or 1) < 6 then return W.Print(L.NEEDS_WANDERER) end
 	W.RegisterExtension({
 		key = "auction",
+		addon = ADDON,
 		title = L.TITLE,
+		news = L.NEWS_LINES,
+		-- (autoBuy, buyCap: each character's now, kept with its list; read once as its start)
 		defaults = { enabled = true, replace = true, duration = "2", tooltip = true, autoBuy = false, buyCap = 5 },
-		ranges = { ["auction.buyCap"] = { 1, 100, 1 } },
 		-- Wanderer's menu: the shopping list, anywhere.
 		launcher = { label = L.SHOPPING, open = function() ns.ToggleList() end },
 		refresh = function()
@@ -342,10 +344,15 @@ function ns.Init()
 				function() return ns.Settings() and ns.Settings().duration or "2" end,
 				function(value) if ns.Settings() then ns.Settings().duration = value end end), enabled, on)
 			o.Checkbox("auction", "tooltip", L.TOOLTIP, L.TOOLTIP_DESC)
-			-- At merchants: what the shopping list lacks, bought on arrival (off), never above the cap.
-			local autoBuy = o.Under(o.Checkbox("auction", "autoBuy", L.AUTOBUY, L.AUTOBUY_DESC), enabled, on)
-			o.Under(o.Slider("AUCTION_BUY_CAP", L.AUTOBUY_CAP, "auction.buyCap", function(value) return U.Coins(value * 10000) end),
-				autoBuy, o.IsOn("auction", "autoBuy"))
+			-- At merchants: what the shopping list lacks, bought on arrival (off), for this character (its cap: in
+			-- the shopping list's window).
+			if o.Toggle then
+				o.Under(o.Toggle("AUCTION_AUTOBUY", L.AUTOBUY, L.AUTOBUY_DESC, false, function() return ns.AutoBuy() end,
+					function(value) ns.AutoBuy(value) end), enabled, on)
+				-- At the banker: what the list lacks, taken from the bank first (off), for this character.
+				o.Under(o.Toggle("AUCTION_FROMBANK", L.FROMBANK, L.FROMBANK_DESC, false, function() return ns.FromBank() end,
+					function(value) ns.FromBank(value) end), enabled, on)
+			end
 		end,
 	})
 	pcall(events.RegisterEvent, events, "AUCTION_HOUSE_SHOW")

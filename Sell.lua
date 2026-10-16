@@ -73,7 +73,7 @@ local function Read()
 		local here = entry.auction and "auction" or "rest"
 		if here ~= part then
 			part = here
-			drawn[#drawn + 1] = { header = here == "auction" and L.SECTION_AUCTION or L.SECTION_REST }
+			drawn[#drawn + 1] = { header = here == "auction" and L.FOR_AUCTION or L.SECTION_REST }
 		end
 		drawn[#drawn + 1] = entry
 	end

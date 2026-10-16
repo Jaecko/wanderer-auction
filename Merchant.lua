@@ -62,8 +62,7 @@ end
 -- On arrival: what the list lacks of everything he sells, bought in one go (after the junk is sold).
 local open = false
 local function BuyAll()
-	local settings = ns.Settings()
-	if not (open and ns.On() and settings and settings.autoBuy) then return end
+	if not (open and ns.On() and ns.AutoBuy()) then return end
 	local list, lots, total = ns.Shopping(), {}, 0
 	for index = 1, Clean(Safe(GetMerchantNumItems)) or 0 do
 		local id = Clean(Safe(GetMerchantItemID, index))
@@ -75,7 +74,7 @@ local function BuyAll()
 		end
 	end
 	if not lots[1] then return end
-	local cap = (settings.buyCap or 5) * 10000
+	local cap = ns.BuyCap() * 10000
 	if total > cap then return W.Print(L.AUTOBUY_OVER:format(U.Coins(total), U.Coins(cap))) end
 	if total > (Clean(Safe(GetMoney)) or 0) then return W.Print(L.AUTOBUY_NO_MONEY:format(U.Coins(total))) end
 	local said = {}
@@ -98,8 +97,8 @@ end
 local function Link(square)
 	if links[square] then return links[square] end
 	local frame = _G["MerchantItem" .. square]
-	if not (frame and Skin and Skin.CreateLink) then return nil end
-	local link = Skin.CreateLink(frame, "", function(self)
+	if not (frame and Skin and (Skin.SmallButton or Skin.CreateLink)) then return nil end
+	local link = (Skin.SmallButton or Skin.CreateLink)(frame, "", function(self)
 		if self.index and self.lack and self.lack > 0 then Buy(self.index, self.lack, self.id) end
 	end)
 	link:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
@@ -140,8 +139,7 @@ do
 			events:RegisterEvent("BAG_UPDATE_DELAYED")
 			events:RegisterEvent("MERCHANT_UPDATE")
 			-- (Shift held on arrival: nothing bought, as for the junk and the repair)
-			local settings = ns.Settings()
-			if ns.On() and settings and settings.autoBuy and not U.IsSkipping() and next(ns.Shopping()) then
+			if ns.On() and ns.AutoBuy() and not U.IsSkipping() and next(ns.Shopping()) then
 				C_Timer.After(1, function() WhenSold(0) end)
 			end
 		elseif event == "MERCHANT_CLOSED" then

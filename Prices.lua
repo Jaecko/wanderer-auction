@@ -90,11 +90,54 @@ local ItemID = U.ItemID
 
 -- The shopping list ------------------------------------------------------------------------------
 
--- What you want to buy: item id -> { count, note (what for), time }. For the whole account.
-function ns.Shopping()
+-- This character's own: its list (item id -> { count, note (what for), time }), its automatic buying at
+-- merchants (autoBuy, buyCap in gold). Its first time: the list once shared by the whole account, and the
+-- buying as the settings had it, as its start; then its own.
+local function Mine()
 	local saved = DB()
-	saved.shopping = type(saved.shopping) == "table" and saved.shopping or {}
-	return saved.shopping
+	saved.characters = type(saved.characters) == "table" and saved.characters or {}
+	local who = U.Clean(U.Safe(UnitGUID, "player"))
+	local mine = who and saved.characters[who]
+	if not mine then
+		local list = {}
+		-- (the old shared list, a month long after the first character took it: one made later starts clean)
+		local now = time()
+		saved.sharedUntil = saved.sharedUntil or now + 30 * 86400
+		local old = now <= saved.sharedUntil and saved.shopping or nil
+		for id, entry in pairs(type(old) == "table" and old or {}) do
+			if type(entry) == "table" then
+				local copy = {}
+				for key, value in pairs(entry) do copy[key] = value end
+				list[id] = copy
+			end
+		end
+		local settings = ns.Settings and ns.Settings() or {}
+		mine = { shopping = list, autoBuy = settings.autoBuy and true or false, buyCap = tonumber(settings.buyCap) or 5 }
+		-- (the character not known yet, at the very start: a passing copy, nothing kept)
+		if who then saved.characters[who] = mine end
+	end
+	mine.shopping = type(mine.shopping) == "table" and mine.shopping or {}
+	return mine
+end
+
+function ns.Shopping() return Mine().shopping end
+
+-- Buying on arrival at merchants, for this character: on or off (value: set), and its cap in gold.
+function ns.AutoBuy(value)
+	local mine = Mine()
+	if value ~= nil then mine.autoBuy = value and true or false end
+	return mine.autoBuy and true or false
+end
+-- Taking from the bank what the list lacks, at the banker, for this character (value: set). Off at first.
+function ns.FromBank(value)
+	local mine = Mine()
+	if value ~= nil then mine.fromBank = value and true or false end
+	return mine.fromBank and true or false
+end
+function ns.BuyCap(gold)
+	local mine = Mine()
+	if gold then mine.buyCap = math.max(1, math.min(math.floor(gold), 100)) end
+	return tonumber(mine.buyCap) or 5
 end
 
 -- An item's name, or its number while the game has not sent it.

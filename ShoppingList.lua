@@ -94,26 +94,30 @@ local function Create()
 	})
 	list:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 74))
 	list.empty:SetText(L.LIST_EMPTY)
-	list:Fit(HEIGHT - (margin + 74) - (margin + 40))
+	list:Fit(HEIGHT - (margin + 74) - (margin + 64))
 	-- At the auction house: all of them searched there (its own page).
 	window.search = Skin.Button(window, L.SEARCH_ALL, function()
 		window:Hide()
 		ns.Open("shopping")
 	end, "main")
 	window.search:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
-	-- Buying on arrival at merchants (the option of Wanderer's settings, here too), and its cap: a click changes it.
-	local function Settings() return ns.Settings() or {} end
-	window.autoBuy = Skin.Check(window, L.LIST_AUTOBUY, function() return Settings().autoBuy end, function(value)
-		if ns.Settings() then ns.Settings().autoBuy = value end
+	-- Buying on arrival at merchants, for this character (the option of Wanderer's settings, here too), and
+	-- its cap: a click changes it.
+	window.autoBuy = Skin.Check(window, L.LIST_AUTOBUY, function() return ns.AutoBuy() end, function(value)
+		ns.AutoBuy(value)
 		window.cap:SetShown(value)
 	end, L.AUTOBUY_DESC)
-	window.autoBuy:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + 6)
-	window.cap = Skin.CreateLink(window, "", function()
-		Skin.AskText(L.LIST_CAP_ASK, tostring(Settings().buyCap or 5), function(text)
+	window.autoBuy:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + 30)
+	-- Taking from the bank first, at the banker, for this character.
+	window.fromBank = Skin.Check(window, L.LIST_FROMBANK, function() return ns.FromBank() end, function(value) ns.FromBank(value) end,
+		L.FROMBANK_DESC)
+	window.fromBank:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + 6)
+	window.cap = (Skin.SmallButton or Skin.CreateLink)(window, "", function()
+		Skin.AskText(L.LIST_CAP_ASK, tostring(ns.BuyCap()), function(text)
 			local gold = tonumber(text)
-			if gold and gold >= 1 and ns.Settings() then
-				ns.Settings().buyCap = math.min(math.floor(gold), 100)
-				window.cap:SetLabel(L.LIST_CAP:format(U.Coins(ns.Settings().buyCap * 10000)))
+			if gold and gold >= 1 then
+				ns.BuyCap(gold)
+				window.cap:SetLabel(L.LIST_CAP:format(U.Coins(ns.BuyCap() * 10000)))
 			end
 		end, 3)
 	end, L.LIST_CAP_DESC)
@@ -122,8 +126,9 @@ local function Create()
 	window:HookScript("OnShow", function(self)
 		names:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 		self.autoBuy:Refresh()
-		self.cap:SetLabel(L.LIST_CAP:format(U.Coins((Settings().buyCap or 5) * 10000)))
-		self.cap:SetShown(Settings().autoBuy and true or false)
+		self.fromBank:Refresh()
+		self.cap:SetLabel(L.LIST_CAP:format(U.Coins(ns.BuyCap() * 10000)))
+		self.cap:SetShown(ns.AutoBuy())
 		self:SetScale(Skin.Scale())
 		self.search:SetShown(ns.IsShown and ns.IsShown() or false)
 		list.offset = 0
