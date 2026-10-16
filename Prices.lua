@@ -193,6 +193,12 @@ function ns.SetShopping(id, count, note, keep)
 	local list = ns.Shopping()
 	if keep == nil then keep = list[id] and list[id].keep or false end
 	local have = Carried(id)
+	-- (a line already there, only its kind changed: kept as it is, once now)
+	if keep == false and list[id] and list[id].keep then
+		list[id].keep = nil
+		if ns.RefreshShopping then ns.RefreshShopping() end
+		return true
+	end
 	if have >= count and not keep then
 		if W.Print then W.Print(L.SHOPPING_ALREADY:format(have, ItemName(id))) end
 		return false

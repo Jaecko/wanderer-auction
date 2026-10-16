@@ -241,9 +241,9 @@ local function Search()
 		return
 	end
 	pending = false
-	if selected and not selected.key then
-		Query(selected)
-		return
+	if selected and not selected.key and not selected.unknown then
+		if Query(selected) then return end
+		selected.unknown = true -- (the auction house has no key for it: the others looked up all the same)
 	end
 	-- One look at a time: the next when this one is answered (or, unanswered, a moment later).
 	if scanning then return end
