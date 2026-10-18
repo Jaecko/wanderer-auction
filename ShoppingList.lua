@@ -191,6 +191,7 @@ end
 -- Wanderer's key binding (the game's key options, "Wanderer Auction").
 BINDING_HEADER_WANDERERAUCTION = "Wanderer Auction"
 BINDING_NAME_WANDERERAUCTION_LIST = L.SHOPPING
+BINDING_NAME_WANDERERAUCTION_POST_NEXT = L.SELL_ALL_KEY
 function WandererAuction_ToggleList() ns.ToggleList() end
 
 do

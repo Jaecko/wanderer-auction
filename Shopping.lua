@@ -115,7 +115,6 @@ local function Edit(entry)
 	detail.editor:SetShown(editing ~= nil)
 	if entry then
 		detail.editName:SetText(L.MAX_FOR:format(entry.name))
-		detail.money:ShowCopper(ns.CopperOnly())
 		detail.money:Set(entry.max or best[entry.id] or 0)
 	end
 	Draw()

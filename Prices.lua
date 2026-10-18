@@ -31,11 +31,158 @@ function ns.Settings()
 	return W and W.Settings("auction")
 end
 
--- The lowest price seen for an item, each (copper), now.
-function ns.Remember(id, price)
+-- An item's day (today's, made when missing): { day, the market's value (nil until a full look), how many
+-- looks counted it, the cheapest seen }. The last 14 days kept.
+local DAYS_KEPT = 14
+local function Today(seen)
+	local today = math.floor(time() / DAY)
+	seen.days = seen.days or {}
+	local last = seen.days[#seen.days]
+	if not (last and last[1] == today) then
+		last = { today, nil, 0, nil }
+		seen.days[#seen.days + 1] = last
+	end
+	while seen.days[1] and today - seen.days[1][1] >= DAYS_KEPT do table.remove(seen.days, 1) end
+	return last
+end
+
+-- The lowest price seen for an item, each (copper), now. followed: an item of yours looked up to sell, its
+-- day's cheapest kept with its days (the history); a price only passing by (a search) keeps none.
+function ns.Remember(id, price, followed)
 	id, price = tonumber(id), tonumber(price)
 	if not (id and price and price > 0) then return end
-	DB().prices[id] = { price = price, time = time() }
+	local seen = DB().prices[id] or {}
+	seen.price, seen.time = price, time()
+	DB().prices[id] = seen
+	if followed then
+		local day = Today(seen)
+		day[4] = math.min(day[4] or price, price)
+	end
+end
+
+-- The market's value ------------------------------------------------------------------------------
+--
+-- As TradeSkillMaster's AuctionDB counts it, from what is for sale now ({ price each, how many }, cheapest
+-- first): only the cheapest part (at most 30 % of the quantity; past 15 %, cut where a price jumps by 20 %
+-- or more), then what lies further than 1.5 standard deviations from their mean left out, then the mean of
+-- the rest, weighted by quantity. Nil when nothing is for sale.
+function ns.MarketValue(listings)
+	local total = 0
+	for _, offer in ipairs(listings) do total = total + offer[2] end
+	if total <= 0 then return nil end
+	-- (counted by units, as TSM does: the offer that crosses 30 % counts only for its share, so one cheap unit
+	-- before a big pile never makes the whole value)
+	local most = math.max(1, math.floor(total * 0.3))
+	local kept, counted, last = {}, 0, nil
+	for _, offer in ipairs(listings) do
+		if counted >= most then break end
+		if counted / total >= 0.15 and last and offer[1] >= last * 1.2 then break end
+		local units = math.min(offer[2], most - counted)
+		if units > 0 then kept[#kept + 1] = { offer[1], units } end
+		counted, last = counted + units, offer[1]
+	end
+	local function Mean(list)
+		local sum, weight = 0, 0
+		for _, offer in ipairs(list) do sum, weight = sum + offer[1] * offer[2], weight + offer[2] end
+		return weight > 0 and sum / weight or nil, weight
+	end
+	local mean, weight = Mean(kept)
+	if not mean then return nil end
+	local spread = 0
+	for _, offer in ipairs(kept) do spread = spread + offer[2] * (offer[1] - mean) ^ 2 end
+	spread = math.sqrt(spread / weight)
+	local close = {}
+	for _, offer in ipairs(kept) do
+		if math.abs(offer[1] - mean) <= 1.5 * spread then close[#close + 1] = offer end
+	end
+	return math.floor((Mean(close[1] and close or kept)) + 0.5)
+end
+
+-- The market's value over the last 14 days, each day weighing half as much every 2 days (a day's value:
+-- the mean of that day's looks). Kept with the item's price.
+local HALF_LIFE = 2
+function ns.RememberMarket(id, value)
+	id, value = tonumber(id), tonumber(value)
+	if not (id and value and value > 0) then return end
+	local seen = DB().prices[id]
+	if not seen then
+		seen = { time = time() }
+		DB().prices[id] = seen
+	end
+	local day = Today(seen)
+	local looks = day[3] or 0
+	day[2], day[3] = ((day[2] or 0) * looks + value) / (looks + 1), looks + 1
+end
+
+-- The weighted value (beforeToday: without today's, to judge today against the days before).
+function ns.Market(id, beforeToday)
+	local seen = DB().prices[tonumber(id) or -1]
+	local days = seen and seen.days
+	if not (days and days[1]) then return nil end
+	local today = math.floor(time() / DAY)
+	local sum, weight = 0, 0
+	for _, day in ipairs(days) do
+		if day[2] and today - day[1] < DAYS_KEPT and not (beforeToday and day[1] == today) then
+			local w = 0.5 ^ ((today - day[1]) / HALF_LIFE)
+			sum, weight = sum + day[2] * w, weight + w
+		end
+	end
+	return weight > 0 and math.floor(sum / weight + 0.5) or nil
+end
+
+-- An item's days, oldest first: { day, value, looks, cheapest } (a copy to read, never to change).
+function ns.Days(id)
+	local seen = DB().prices[tonumber(id) or -1]
+	local copy, today = {}, math.floor(time() / DAY)
+	for _, day in ipairs(seen and seen.days or {}) do
+		if today - day[1] < DAYS_KEPT then copy[#copy + 1] = { day[1], day[2], day[3], day[4] } end
+	end
+	return copy
+end
+
+-- Whether to sell now, as TradeSkillMaster's sellers judge it: today's value against the days before.
+-- Returns "few" (fewer than 2 days with a value), "merchant" (a merchant gives as much once the cut taken),
+-- "good" (10 % or more above), "wait" (15 % or more below), or "usual"; and today's value against the days
+-- before (1.12: 12 % above).
+ns.SELL_NOW, ns.WAIT_UNDER = 1.10, 0.85
+function ns.Advice(id, vendor)
+	local days, valued = ns.Days(id), 0
+	for _, day in ipairs(days) do if day[2] then valued = valued + 1 end end
+	local today = days[#days]
+	local now = today and today[1] == math.floor(time() / DAY) and today[2] or nil
+	local before = ns.Market(id, true)
+	if vendor and vendor > 0 and (now or before) and ns.Net(now or before) <= vendor then return "merchant" end
+	if valued < 2 or not (now and before) then return "few" end
+	local ratio = now / before
+	if ratio >= ns.SELL_NOW then return "good", ratio end
+	if ratio <= ns.WAIT_UNDER then return "wait", ratio end
+	return "usual", ratio
+end
+
+-- The optimized price: the reference is the market's value now and over the last days (their mean when
+-- both are known); what is offered under 80 % of it is left out (a bait: sold low to be bought and sold
+-- again dearer, it says nothing of the market); one copper under the first offer left, never under the
+-- floor (a merchant's) nor 80 % of the reference, never over twice the reference (the reference itself
+-- when nothing credible is for sale). Returns the price, how many offers were left out, the reference
+-- and the cheapest credible offer (nil without any reference).
+ns.TRUSTED_SHARE, ns.HIGHEST_SHARE = 0.8, 2
+function ns.Optimize(listings, history, floor)
+	local now = ns.MarketValue(listings)
+	local reference = now and history and (now + history) / 2 or now or history
+	if not reference then return nil end
+	reference = math.floor(reference + 0.5)
+	local trusted = math.floor(reference * ns.TRUSTED_SHARE)
+	local low = math.max(1, floor or 0, trusted)
+	local high = math.max(low, math.floor(reference * ns.HIGHEST_SHARE))
+	local left = 0 -- (the bait: under 80 % of the reference; under the floor only, it is no bait)
+	for _, offer in ipairs(listings) do
+		if offer[1] >= low then
+			if offer[1] > high then break end
+			return math.max(low, offer[1] - 1), left, reference, offer[1]
+		end
+		if offer[1] < trusted then left = left + 1 end
+	end
+	return math.min(high, math.max(low, math.floor(reference + 0.5))), left, reference, nil
 end
 
 -- The price remembered and its age in seconds, or nil.
@@ -68,13 +215,11 @@ function ns.Vendor(link)
 	return price and price > 0 and price or 0
 end
 
--- The least price worth asking, each: its net above the merchant's (in silver where copper is not
--- taken). 0 when no merchant buys it.
+-- The least price worth asking, each: its net above the merchant's. 0 when no merchant buys it.
 function ns.Floor(vendor)
 	if not vendor or vendor <= 0 then return 0 end
 	local price = math.ceil((vendor + 1) / (1 - ns.CUT))
 	while ns.Net(price) <= vendor do price = price + 1 end
-	if not (ns.CopperOnly and ns.CopperOnly()) then price = math.ceil(price / 100) * 100 end
 	return price
 end
 

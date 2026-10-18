@@ -2,4 +2,7 @@
 	<Binding name="WANDERERAUCTION_LIST" header="WANDERERAUCTION">
 		WandererAuction_ToggleList()
 	</Binding>
+	<Binding name="WANDERERAUCTION_POST_NEXT">
+		WandererAuction_PostNext()
+	</Binding>
 </Bindings>

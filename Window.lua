@@ -50,6 +50,8 @@ function ns.DurationName(index)
 end
 
 function ns.IsShown() return window and window:IsShown() or false end
+function ns.MainWindow() return window end
+function ns.CurrentPage() return current end
 function ns.AtAuction() return atAuction end
 
 -- The tabs: the page shown underlined in gold; a count beside those where something waits.
@@ -266,8 +268,6 @@ function ns.TimeLeft(band)
 	return band and _G["AUCTION_TIME_LEFT" .. (band + 1)] or ""
 end
 
--- Whether the auction house takes copper (else prices in silver).
-function ns.CopperOnly() return U.Clean(U.Safe(ns.AH.SupportsCopperValues)) and true or false end
 
 -- Init ------------------------------------------------------------------------------------------------
 
@@ -328,7 +328,7 @@ function ns.Init()
 		title = L.TITLE,
 		news = L.NEWS_LINES,
 		-- (autoBuy, buyCap: each character's now, kept with its list; read once as its start)
-		defaults = { enabled = true, replace = true, duration = "2", tooltip = true, autoBuy = false, buyCap = 5 },
+		defaults = { enabled = true, replace = true, duration = "2", tooltip = true, autoBuy = false, buyCap = 5, toMerchant = true },
 		-- Wanderer's menu: the shopping list, anywhere.
 		launcher = { label = L.SHOPPING, open = function() ns.ToggleList() end },
 		refresh = function()
@@ -344,6 +344,8 @@ function ns.Init()
 				function() return ns.Settings() and ns.Settings().duration or "2" end,
 				function(value) if ns.Settings() then ns.Settings().duration = value end end), enabled, on)
 			o.Checkbox("auction", "tooltip", L.TOOLTIP, L.TOOLTIP_DESC)
+			-- (with Wanderer Bags: set aside for the auction house, but more at a merchant: junk, sold at the next one)
+			o.Under(o.Checkbox("auction", "toMerchant", L.TO_MERCHANT, L.TO_MERCHANT_DESC), enabled, on)
 			-- At merchants: what the shopping list lacks, bought on arrival (off), for this character (its cap: in
 			-- the shopping list's window).
 			if o.Toggle then

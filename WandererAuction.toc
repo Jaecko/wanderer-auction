@@ -12,7 +12,7 @@
 ## Notes-zhCN: Wanderer 窗口中的拍卖行：出售、购买、你的拍卖和竞标；为你找到最低价，绝不低于商人收购价。
 ## Notes-zhTW: Wanderer 視窗中的拍賣場：出售、購買、你的拍賣和競標；為你找到最低價，絕不低於商人收購價。
 ## Category: Auction
-## Version: 0.4.1
+## Version: 0.5.0
 ## X-Curse-Project-ID: 1739533
 ## Author: Jaekco
 ## IconTexture: Interface\Icons\INV_Misc_Coin_01
@@ -25,9 +25,11 @@ Locales.lua
 Locales\[TextLocale].lua
 Prices.lua
 Window.lua
+Log.lua
 Sell.lua
 Buy.lua
 Follow.lua
+History.lua
 Shopping.lua
 ShoppingList.lua
 Crafting.lua

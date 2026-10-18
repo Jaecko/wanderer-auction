@@ -292,7 +292,6 @@ local function Choose(entry, mouse)
 		buttons.bid:SetShown(not entry.commodity)
 		detail.want = 1
 		detail.amounts:Select(1)
-		detail.bidMoney:ShowCopper(ns.CopperOnly())
 		detail.bidMoney:Set(0)
 		DrawAuctions()
 		buttons.buy:SetEnabled(false)
@@ -613,11 +612,31 @@ function ns.BuyItem(id, name)
 	Choose(entry)
 end
 
+-- An item shift-clicked (in your bags, a link) while the Buy page is shown: searched at once, as the
+-- game's own window does, the search box chosen or not (once: the box may have taken it already).
+local insertedAt -- (when the box took a link itself)
+if hooksecurefunc and HandleModifiedItemClick then
+	hooksecurefunc("HandleModifiedItemClick", function(link)
+		if type(link) ~= "string" or not (IsShiftKeyDown and IsShiftKeyDown()) then return end
+		if not (ns.IsShown() and ns.CurrentPage() == "buy" and list and list:IsVisible()) then return end
+		if insertedAt == GetTime() then return end
+		if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() then return end -- (a link for the chat)
+		local name = U.LinkName(link)
+		if not name then return end
+		ns.SearchFor(name)
+		-- (the game opens its stack splitter on the same shift-click: put away, it was a search)
+		C_Timer.After(0, function()
+			if StackSplitFrame and StackSplitFrame:IsShown() then StackSplitFrame:Hide() end
+		end)
+	end)
+end
+
 if hooksecurefunc and ChatEdit_InsertLink then
 	hooksecurefunc("ChatEdit_InsertLink", function(link)
 		if not (box and box:HasFocus() and type(link) == "string") then return end
 		local name = U.LinkName(link)
 		if not name then return end
+		insertedAt = GetTime()
 		box:SetText(name)
 		box:ClearFocus()
 		Browse(name)
