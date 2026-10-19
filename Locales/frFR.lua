@@ -254,4 +254,8 @@ ns.LOCALES.frFR = {
 		ADVICE_WAIT = "Le prix du jour est %d %% sous sa valeur habituelle : il remonte souvent, mieux vaut attendre si vous pouvez.",
 		ADVICE_MERCHANT = "Un marchand en donne autant, une fois la commission de l'hôtel des ventes prise : vendez-le à un marchand.",
 		ADVICE_FEW = "Suivi sur %d jour(s) seulement : cherchez ses prix d'autres jours pour pouvoir juger.",
+		CHIP_REFUSED = "Refusé par le serveur",
+		HINT_REFUSED = "Le serveur a déjà refusé de mettre cet objet en vente (certains objets aux statistiques propres, « de la chouette »...). Réessayez si vous le souhaitez ; un marchand le reprend toujours.",
+		REFUSED_SAID = "%s : le serveur refuse de le mettre en vente. Wanderer Auction s'en souvient et ne le propose plus.",
+		REFUSED_JUNK = "%s : le serveur refuse de le mettre en vente. Mis aux rebuts : il sera vendu au prochain marchand.",
 }

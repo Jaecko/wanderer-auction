@@ -254,4 +254,8 @@ ns.LOCALES.deDE = {
 		ADVICE_WAIT = "Der heutige Preis liegt %d %% unter seinem üblichen Wert: er steigt meist wieder, warten Sie besser, wenn Sie können.",
 		ADVICE_MERCHANT = "Ein Händler zahlt nach Abzug der Auktionshausgebühr genauso viel: verkaufen Sie es einem Händler.",
 		ADVICE_FEW = "Erst an %d Tag(en) verfolgt: suchen Sie seine Preise an anderen Tagen, um zu urteilen.",
+		CHIP_REFUSED = "Vom Server abgelehnt",
+		HINT_REFUSED = "Der Server hat schon abgelehnt, diesen Gegenstand einzustellen (manche Gegenstände mit eigenen Werten, „der Eule“...). Versucht es ruhig erneut; ein Händler nimmt ihn immer.",
+		REFUSED_SAID = "%s: Der Server lehnt das Einstellen ab. Wanderer Auction merkt es sich und bietet ihn nicht mehr an.",
+		REFUSED_JUNK = "%s: Der Server lehnt das Einstellen ab. Zu Plunder gemacht: Er wird beim nächsten Händler verkauft.",
 }

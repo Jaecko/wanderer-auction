@@ -254,4 +254,8 @@ ns.LOCALES.ptBR = {
 		ADVICE_WAIT = "O preço de hoje está %d %% abaixo do seu valor habitual: costuma voltar a subir, melhor esperar se puder.",
 		ADVICE_MERCHANT = "Um mercador paga o mesmo, descontada a taxa da casa de leilões: venda-o a um mercador.",
 		ADVICE_FEW = "Acompanhado em apenas %d dia(s): busque seus preços em outros dias para poder julgar.",
+		CHIP_REFUSED = "Recusado pelo servidor",
+		HINT_REFUSED = "O servidor já se recusou a pôr este item à venda (alguns itens com atributos próprios, \"da coruja\"...). Tente de novo se quiser; um mercador sempre o compra.",
+		REFUSED_SAID = "%s: o servidor se recusa a pô-lo à venda. O Wanderer Auction se lembra e não o oferece mais.",
+		REFUSED_JUNK = "%s: o servidor se recusa a pô-lo à venda. Virou sucata: será vendido no próximo mercador.",
 }

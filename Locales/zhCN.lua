@@ -254,4 +254,8 @@ ns.LOCALES.zhCN = {
 		ADVICE_WAIT = "今天的价格比平常低 %d %%：通常会回升，能等的话最好再等等。",
 		ADVICE_MERCHANT = "扣除拍卖行手续费后，商人给的一样多：卖给商人吧。",
 		ADVICE_FEW = "只跟踪了 %d 天：在其他日子也查询价格才能判断。",
+		CHIP_REFUSED = "被服务器拒绝",
+		HINT_REFUSED = "服务器曾拒绝上架此物品（某些带有独立属性的物品，如“猫头鹰之”……）。如果愿意可以再试；商人总会收购它。",
+		REFUSED_SAID = "%s：服务器拒绝上架。Wanderer Auction 会记住它，不再推荐出售。",
+		REFUSED_JUNK = "%s：服务器拒绝上架。已标记为垃圾：将在下一个商人处卖掉。",
 }

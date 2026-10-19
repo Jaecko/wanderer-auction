@@ -257,6 +257,10 @@ local LOCALES = {
 		ADVICE_WAIT = "Today's price is %d %% under its usual value: it usually comes back up, better to wait if you can.",
 		ADVICE_MERCHANT = "A merchant gives as much once the auction house's cut is taken: sell it to a merchant.",
 		ADVICE_FEW = "Followed on %d day(s) only: look up its prices on other days to judge it.",
+		CHIP_REFUSED = "Refused by the server",
+		HINT_REFUSED = "The server refused to post this item before (some items with stats of their own, \"of the owl\"...). Try again if you wish; a merchant still takes it.",
+		REFUSED_SAID = "%s: the server refuses to post it. Wanderer Auction remembers it and no longer offers it.",
+		REFUSED_JUNK = "%s: the server refuses to post it. Made junk: it will be sold at the next merchant.",
 	},
 }
 -- The client's language comes in its own file, loaded after this one (Locales/<code>.lua).

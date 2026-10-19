@@ -185,6 +185,18 @@ function ns.Optimize(listings, history, floor)
 	return math.min(high, math.max(low, math.floor(reference + 0.5))), left, reference, nil
 end
 
+-- The items the server refuses to post (some of Forever's, with stats of their own: "of the owl"), kept
+-- for every character; forgotten as soon as one is posted after all.
+function ns.Refused(id)
+	local refused = DB().refused
+	return refused and refused[tonumber(id) or -1] ~= nil or false
+end
+function ns.Refuse(id, on)
+	local saved = DB()
+	saved.refused = saved.refused or {}
+	saved.refused[tonumber(id) or -1] = on ~= false and time() or nil
+end
+
 -- The price remembered and its age in seconds, or nil.
 function ns.Price(id)
 	local seen = DB().prices[tonumber(id) or -1]

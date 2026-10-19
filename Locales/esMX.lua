@@ -254,4 +254,8 @@ ns.LOCALES.esES = {
 		ADVICE_WAIT = "El precio de hoy está un %d %% por debajo de su valor habitual: suele recuperarse, mejor esperar si puedes.",
 		ADVICE_MERCHANT = "Un mercader da lo mismo, una vez descontada la comisión de la casa de subastas: véndelo a un mercader.",
 		ADVICE_FEW = "Seguido solo %d día(s): busca sus precios otros días para poder juzgar.",
+		CHIP_REFUSED = "Rechazado por el servidor",
+		HINT_REFUSED = "El servidor ya se negó a poner este objeto a la venta (algunos objetos con estadísticas propias, «del búho»...). Vuelve a intentarlo si quieres; un mercader siempre lo compra.",
+		REFUSED_SAID = "%s: el servidor se niega a ponerlo a la venta. Wanderer Auction lo recuerda y ya no lo propone.",
+		REFUSED_JUNK = "%s: el servidor se niega a ponerlo a la venta. Convertido en basura: se venderá en el siguiente mercader.",
 }

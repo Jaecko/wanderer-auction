@@ -274,6 +274,7 @@ local function UpdateSale()
 		detail.finance:SetText("")
 	end
 	if losing then detail.finance:SetText("|cffff6060" .. L.BELOW_MERCHANT:format(U.Coins(ItemFloor(selected))) .. "|r") end
+	if ns.Refused(selected.id) then detail.finance:SetText("|cffff6060" .. L.HINT_REFUSED .. "|r") end
 	detail.post:SetEnabled((unit > 0 or typed > 0) and (unit == 0 or typed <= unit) and not losing)
 	detail.what:SetText(L.POST_WHAT:format(quantity, selected.name or ""))
 end
@@ -506,6 +507,8 @@ end
 local function ShowMarket()
 	local entry = selected
 	local lowest = entry and entry.lowest
+	-- (a price large; words, when there is none, as small as the rest of the card)
+	detail.lowest:SetFontObject(lowest and "GameTooltipHeaderText" or "GameTooltipText")
 	detail.lowest:SetText(lowest and U.Coins(lowest) or (entry and entry.searched and L.NOBODY or L.SEARCHING))
 	detail.onSale:SetText(entry and entry.onSale and tostring(entry.onSale) or "")
 	local book = entry and entry.book or {}
@@ -523,6 +526,7 @@ end
 
 -- The table: the price of the market for each, a chip for what matters.
 local function Chip(entry)
+	if ns.Refused(entry.id) then return L.CHIP_REFUSED, "red" end
 	local price = ns.Price(entry.id)
 	if not price and batch.silent[KindOf(entry)] then return L.CHIP_SILENT, "grey" end
 	if not price then return L.CHIP_NO_PRICE, "grey" end
@@ -590,13 +594,17 @@ function ShowScan()
 	if batch.on then UpdateBatch() else Draw() end
 end
 
+-- The price an item was last known at (the market's days, else the last one seen).
+local function Remembered(id) return ns.Market(id) or ns.Price(id) end
+
 -- Set aside for the auction house (Wanderer Bags), but bringing more at a merchant: made junk (the option),
--- sold at the next merchant; said in the chat. (Only from a look at the prices: never the item you chose.)
+-- sold at the next merchant; said in the chat. (From a look at the prices, or the item you chose: it could
+-- not be posted anyway.)
 local function ToMerchant(kind, lowest, mine)
 	-- (lowest: the cheapest offer to believe)
 	if not (lowest and not mine and ns.Settings() and ns.Settings().toMerchant and Marks().ToJunk) then return end
 	for _, entry in ipairs(entries) do
-		if not entry.header and entry.auction and entry ~= selected and KindOf(entry) == kind
+		if not entry.header and entry.auction and KindOf(entry) == kind
 			and Losing(entry, lowest, 0) and Marks().ToJunk(entry.id) then
 			entry.auction = false
 			if W.Print then W.Print(L.MOVED_TO_JUNK:format(entry.link or entry.name or "")) end
@@ -614,7 +622,8 @@ function Scanned()
 	if lowest then ns.Remember(this.id, lowest, true) end
 	Seen(this.kind, lowest, mine, opt)
 	if Looking() then Logged(this.entry, lowest, mine, opt) end
-	ToMerchant(this.kind, Credible(lowest, opt), mine)
+	-- (nobody selling it now: judged by the price it was last seen at, as its row says)
+	ToMerchant(this.kind, lowest and Credible(lowest, opt) or Remembered(this.id), mine)
 	Count(lowest and "found" or "nobody")
 	ShowScan()
 	Search()
@@ -746,6 +755,7 @@ local function ShowPrices()
 	if lowest then selected.counted = true end
 	if lowest then ns.Remember(selected.id, lowest, true) end
 	Seen(KindOf(selected), lowest, mine, selected.opt)
+	ToMerchant(KindOf(selected), lowest and Credible(lowest, selected.opt) or Remembered(selected.id), mine)
 	-- Your own price: offered once (what you type after is never overwritten), as your way prices it.
 	if not selected.offered then
 		selected.offered = true
@@ -877,10 +887,14 @@ local function BatchDuration() return batch.duration or SavedDuration() end
 -- The price each when selling everything, or nil and why ("search": not looked up yet, "merchant": better
 -- there). Nobody selling it: the last price seen (or the game's own), said so ("nobody").
 function BatchPrice(entry)
+	if ns.Refused(entry.id) then return nil, "refused" end
 	local seen = batch.seen[KindOf(entry)]
 	if seen == nil then return nil, "search" end
 	local opt = seen and Way() == "optimized" and seen.opt or nil
 	if seen and Losing(entry, Credible(seen.lowest, seen.opt), 0) then return nil, "merchant" end
+	-- (nobody selling it: better at a merchant by the price it was last known at, as its row says)
+	local known = seen == false and Remembered(entry.id)
+	if known and Losing(entry, known, 0) then return nil, "merchant" end
 	return (PriceFor(entry, seen and seen.lowest, seen and seen.mine, Way(), opt)), seen == false and "nobody" or nil
 end
 
@@ -906,6 +920,7 @@ function BatchChip(entry)
 	local unit, why = BatchPrice(entry)
 	if why == "search" then return batch.silent[kind] and L.CHIP_SILENT or L.CHIP_SEARCHING, "grey" end
 	if why == "nobody" then return L.CHIP_NOBODY, "blue" end
+	if why == "refused" then return L.CHIP_REFUSED, "red" end
 	local seen = batch.seen[kind]
 	local opt = seen and Way() == "optimized" and seen.opt
 	if unit and opt and opt.left > 0 then return L.CHIP_BAIT:format(opt.left), "blue" end
@@ -1106,6 +1121,8 @@ local function Build(page)
 	lowestLabel:SetText(L.CHEAPEST)
 	detail.lowest = Skin.Text(card, "GameTooltipHeaderText", "text")
 	detail.lowest:SetPoint("TOPLEFT", lowestLabel, "BOTTOMLEFT", 0, -3)
+	detail.lowest:SetPoint("RIGHT", card, "RIGHT", -14, 0)
+	detail.lowest:SetJustifyH("LEFT")
 	local onSaleLabel = Skin.Text(card, "GameTooltipTextSmall", "muted")
 	onSaleLabel:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 14, 12)
 	onSaleLabel:SetText(L.FOR_SALE)
@@ -1319,6 +1336,7 @@ ns.Listen("AUCTION_HOUSE_AUCTION_CREATED", function()
 		-- (yours taken as the price only when none lower was seen: above the market, it is not the market's)
 		local seen = ns.Price(posting.id)
 		if posting.buyout > 0 and not (seen and seen < posting.buyout) then ns.Remember(posting.id, posting.buyout) end
+		ns.Refuse(posting.id, false)
 		local said = L.POSTED:format(posting.name, posting.quantity, U.Coins(posting.unit))
 		if W.Print then W.Print(said) end
 		ns.Log("good", said)
@@ -1332,11 +1350,28 @@ ns.Listen("AUCTION_HOUSE_AUCTION_CREATED", function()
 	Soon()
 	if ns.RefreshTabs then ns.RefreshTabs() end
 end)
-ns.Listen("AUCTION_HOUSE_POST_ERROR", function()
+-- A sale refused (the auction house's answer, or the game's "internal error" said on the screen).
+local function PostRefused()
+	if not posting then return end
 	-- (refused while selling everything: left aside, the next one offered)
 	if posting then ns.Log("bad", L.LOG_POST_ERROR:format(posting.name or "")) end
+	-- An item the server refuses: remembered (never offered again to sell everything); set aside for the
+	-- auction house, made junk to be sold at the next merchant (the option).
+	if posting.id then
+		ns.Refuse(posting.id)
+		local name = posting.name or ""
+		local junk = ns.Settings() and ns.Settings().toMerchant and IsForAuction(posting.id) and Marks().ToJunk
+			and Marks().ToJunk(posting.id)
+		local said = (junk and L.REFUSED_JUNK or L.REFUSED_SAID):format(name)
+		if W.Print then W.Print(said) end
+		ns.Log("bad", said)
+	end
 	if posting and posting.batch then batch.done[posting.batch] = true end
 	posting = nil
 	UpdateBatch()
+end
+ns.Listen("AUCTION_HOUSE_POST_ERROR", PostRefused)
+ns.Listen("UI_ERROR_MESSAGE", function(_, message)
+	if posting and ERR_AUCTION_DATABASE_ERROR and message == ERR_AUCTION_DATABASE_ERROR then PostRefused() end
 end)
 ns.Listen("BAG_UPDATE_DELAYED", Soon)

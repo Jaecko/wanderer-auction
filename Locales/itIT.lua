@@ -254,4 +254,8 @@ ns.LOCALES.itIT = {
 		ADVICE_WAIT = "Il prezzo di oggi è del %d %% sotto il suo valore abituale: di solito risale, meglio aspettare se puoi.",
 		ADVICE_MERCHANT = "Un mercante dà altrettanto, tolta la commissione della casa d'aste: vendilo a un mercante.",
 		ADVICE_FEW = "Seguito solo per %d giorno/i: cerca i suoi prezzi in altri giorni per poter giudicare.",
+		CHIP_REFUSED = "Rifiutato dal server",
+		HINT_REFUSED = "Il server ha già rifiutato di mettere in vendita questo oggetto (alcuni oggetti con statistiche proprie, «del gufo»...). Riprova se vuoi; un mercante lo compra sempre.",
+		REFUSED_SAID = "%s: il server rifiuta di metterlo in vendita. Wanderer Auction lo ricorda e non lo propone più.",
+		REFUSED_JUNK = "%s: il server rifiuta di metterlo in vendita. Reso cianfrusaglia: sarà venduto al prossimo mercante.",
 }
