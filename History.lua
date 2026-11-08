@@ -12,7 +12,6 @@ local L = ns.L
 local W = Wanderer
 local U = W and W.Util
 local Skin = W and W.Skin
-local Safe = U and U.Safe
 
 local DAYS = 14
 local DAY = 86400
@@ -25,11 +24,6 @@ local ADVICE = { -- chip, its tone, the words on the right
 local list, rows, chosen = nil, {}, nil
 local detail = {}
 
-local function Icon(id)
-	local get = C_Item and C_Item.GetItemIconByID or GetItemIcon
-	return get and U.Clean(Safe(get, id)) or nil
-end
-
 -- Every item with prices seen: { id, name, link, quality, icon, market, ratio, advice, carried }.
 local function Gather()
 	local carried = {}
@@ -37,20 +31,19 @@ local function Gather()
 		local id = U.Clean(info.itemID)
 		if id then carried[id] = true end
 	end)
-	rows = {}
+	local ids = {}
 	for id, seen in pairs(ns.DB().prices) do
 		-- (followed: an item of yours whose prices were looked up to sell; a price only passing by is not)
 		if seen.days and seen.days[1] then
-			rows[#rows + 1] = id
+			ids[#ids + 1] = id
 		end
 	end
-	local ids = rows
 	rows = {}
 	for _, id in ipairs(ids) do
 		local name, link, quality = U.ItemInfo(id)
 		if not name then U.LoadItem(id) end
 		local advice, ratio = ns.Advice(id, ns.Vendor(link))
-		rows[#rows + 1] = { id = id, name = name or ("#" .. id), link = link, quality = quality or 1, icon = Icon(id),
+		rows[#rows + 1] = { id = id, name = name or ("#" .. id), link = link, quality = quality or 1, icon = U.ItemIcon(id),
 			market = ns.Market(id), ratio = ratio, advice = advice, carried = carried[id] or false }
 	end
 	table.sort(rows, function(a, b)
@@ -63,8 +56,8 @@ end
 local function Trend(ratio)
 	if not ratio then return "" end
 	local percent = math.floor((ratio - 1) * 100 + 0.5)
-	if percent > 0 then return "|cff8fe0a2+" .. percent .. " %|r" end
-	if percent < 0 then return "|cffe0a040" .. percent .. " %|r" end
+	if percent > 0 then return Skin.Colorize("+" .. percent .. " %", "good") end
+	if percent < 0 then return Skin.Colorize(percent .. " %", "warn") end
 	return "0 %"
 end
 
@@ -75,7 +68,7 @@ local function Draw()
 		local entry = rows[index + offset]
 		local values, chip, tone
 		if entry then
-			values = { market = entry.market and U.Coins(entry.market) or "|cff8f8676" .. L.NEVER_SEEN .. "|r",
+			values = { market = entry.market and U.Coins(entry.market) or Skin.Colorize(L.NEVER_SEEN, "muted"),
 				trend = Trend(entry.ratio) }
 			local advice = ADVICE[entry.advice] or ADVICE.few
 			chip, tone = L[advice[1]], advice[2]
@@ -105,7 +98,7 @@ local function Show(entry)
 			low, high = math.min(low or day[2], day[2]), math.max(high or day[2], day[2])
 		end
 	end
-	local function Money(value) return value and U.Coins(math.floor(value + 0.5)) or "|cff8f8676" .. L.NEVER_SEEN .. "|r" end
+	local function Money(value) return value and U.Coins(math.floor(value + 0.5)) or Skin.Colorize(L.NEVER_SEEN, "muted") end
 	detail.market.value:SetText(Money(entry.market))
 	detail.today.value:SetText(Money(todayDay and todayDay[2]))
 	detail.cheapest.value:SetText(Money(todayDay and todayDay[4]))
@@ -128,9 +121,8 @@ local function Show(entry)
 	-- The advice, in words.
 	local advice = ADVICE[entry.advice] or ADVICE.few
 	local percent = entry.ratio and math.floor(math.abs(entry.ratio - 1) * 100 + 0.5) or 0
-	local color = advice[2] == "green" and "|cff8fe0a2" or advice[2] == "red" and "|cffe0a040" or advice[2] == "gold" and "|cffffd100"
-		or "|cff9a948a"
-	detail.advice:SetText(color .. L[advice[1]] .. "|r")
+	local role = advice[2] == "green" and "good" or advice[2] == "red" and "warn" or advice[2] == "gold" and "gold" or "muted"
+	detail.advice:SetText(Skin.Colorize(L[advice[1]], role))
 	detail.why:SetText(entry.advice == "few" and L.ADVICE_FEW:format(valued) or L[advice[3]]:format(percent))
 end
 ns.HistoryRows = function() return rows end -- (tests)
@@ -218,12 +210,13 @@ end
 local function Closed() chosen = nil end
 
 -- A name the game was fetching: the list drawn again (once, a moment after).
-local again = U and U.Debounce and U.Debounce(0.3, function()
+local again = U.Debounce(0.3, function()
 	if list and list:IsVisible() then
 		Gather()
 		Draw()
 	end
 end)
-if again then ns.Listen("GET_ITEM_INFO_RECEIVED", again) end
+ns.Listen("GET_ITEM_INFO_RECEIVED", again)
 
 ns.AddPage("history", L.HISTORY, Build, Shown, Closed)
+ns.PageHelp("history", L.HELP_HISTORY)

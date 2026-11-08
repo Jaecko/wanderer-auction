@@ -17,26 +17,6 @@ local taken -- item id -> how many, this visit
 local steps = 0
 local atBank = false
 
--- The containers of the bank: the tabs bought, your character's then the account's.
-local function BankContainers()
-	local list = {}
-	local types = Enum and Enum.BankType or {}
-	for _, kind in ipairs({ types.Character, types.Account }) do
-		local tabs = kind and C_Bank and C_Bank.FetchPurchasedBankTabData and Safe(C_Bank.FetchPurchasedBankTabData, kind)
-		for _, tab in ipairs(type(tabs) == "table" and tabs or {}) do
-			local id = Clean(tab.ID)
-			if id then list[#list + 1] = id end
-		end
-	end
-	-- (a bank of the older kind: its main container and its bags)
-	if not list[1] then
-		list[1] = BANK_CONTAINER or -1
-		local first = (NUM_BAG_SLOTS or 4) + 1
-		for bag = first, first + (NUM_BANKBAGSLOTS or 7) - 1 do list[#list + 1] = bag end
-	end
-	return list
-end
-
 -- An empty slot of your bags that takes the item (a profession's bag only for its own goods; nil: none).
 local function EmptySlot(id)
 	local container = C_Container or {}
@@ -57,11 +37,13 @@ end
 local function Move()
 	local container = C_Container or {}
 	local list = ns.Shopping()
+	-- (something already in hand, yours: never touched; wait for it to go, the step cap ends the wait)
+	if CursorHasItem and CursorHasItem() then return true end
 	-- (a move not confirmed yet by the game: its items locked, the counts not updated; wait for it)
 	local waiting = false
 	U.EachBagItem(function(_, _, info) if Clean(info.isLocked) then waiting = true end end)
 	if waiting then return true end
-	for _, bag in ipairs(BankContainers()) do
+	for _, bag in ipairs(U.BankIDs()) do
 		for slot = 1, Clean(Safe(container.GetContainerNumSlots, bag)) or 0 do
 			local info = Safe(container.GetContainerItemInfo, bag, slot)
 			local id = type(info) == "table" and Clean(info.itemID)
@@ -94,20 +76,26 @@ end
 local function Said()
 	local words = {}
 	for id, count in pairs(taken or {}) do
-		words[#words + 1] = (U.ItemName(id) or ("#" .. id)) .. " x" .. count
+		words[#words + 1] = L.POST_WHAT:format(count, U.ItemName(id) or ("#" .. id))
 	end
-	if words[1] and W.Print then W.Print(L.FROMBANK_DONE:format(table.concat(words, ", "))) end
+	if words[1] then W.Print(L.FROMBANK_DONE:format(table.concat(words, ", "))) end
 end
 
 local function Step()
-	if not (atBank and taken) then return end
+	-- (Auction or this choice switched off meanwhile: nothing more taken)
+	if not (atBank and taken and ns.On() and ns.FromBank()) then
+		taken = nil
+		return
+	end
+	-- (Wanderer Bags putting your marked items in: waited for, without spending a step)
+	if type(WandererBags) == "table" and WandererBags.Moving and WandererBags.Moving() then return C_Timer.After(STEP, Step) end
 	steps = steps + 1
 	local result = steps <= MAX_STEPS and Move() or false
 	if result == true then
 		C_Timer.After(STEP, Step)
 		return
 	end
-	if result == "full" and W.Print then W.Print(L.FROMBANK_FULL) end
+	if result == "full" then W.Print(L.FROMBANK_FULL) end
 	Said()
 	taken = nil
 	if ns.RefreshShopping then ns.RefreshShopping() end
@@ -124,7 +112,7 @@ do
 		end
 		atBank = true
 		-- (Shift held on arrival: nothing taken)
-		if not (ns.On() and ns.FromBank() and next(ns.Shopping())) or (U and U.IsSkipping()) or InCombatLockdown() then return end
+		if not (ns.On() and ns.FromBank() and next(ns.Shopping())) or U.IsSkipping() or InCombatLockdown() then return end
 		taken, steps = {}, 0
 		C_Timer.After(0.5, Step)
 	end)

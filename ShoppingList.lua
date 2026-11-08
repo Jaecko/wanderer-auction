@@ -2,9 +2,9 @@ local _, ns = ...
 local L = ns.L
 
 -- Your shopping list anywhere, in a small Wanderer window: what you carry against what you want, what for.
--- A click changes how many, its link takes it off, a Shift+click on an item adds it (how many asked). At the
--- auction house, a button searches them all there. Opened from the bags' heading (Wanderer Bags), a tab on
--- the merchant's window, Wanderer's menu, a key of yours or /wauction list.
+-- A click opens its card (ShoppingCard.lua, as on the auction house's page: taken off there), a Shift+click on
+-- an item adds it (how many asked). At the auction house, a button searches them all there. Opened from the
+-- bags' heading (Wanderer Bags), a tab on the merchant's window, Wanderer's menu, a key of yours or /wauction.
 
 local W = Wanderer
 local U = W and W.Util
@@ -16,7 +16,7 @@ local ROWS = 12
 local window, list, rows = nil, nil, {}
 local tab -- the merchant's side tab
 
-local Carried = U and U.ItemCount
+local Carried = U.ItemCount
 
 -- How many items the list still lacks (those you carry enough of are leaving it).
 function ns.ShoppingLack()
@@ -35,13 +35,18 @@ local function Draw()
 		local values
 		if entry then
 			values = {
-				what = entry.note or (entry.keep and L.KEEP_NOTE) or L.YOUR_LIST,
+				what = ns.ShoppingWhat(entry),
 				have = ns.HaveWant(entry.have, entry.want),
 			}
 		end
-		-- (always on you: its chip, gold)
-		row:Fill(entry, false, values, entry and entry.keep and L.CHIP_KEEP or nil, "gold", entry and L.REMOVE,
-			entry and function() ns.RemoveFromShopping(entry.id) end)
+		-- (always on you: its chip, gold; sold by a merchant: his price beside it)
+		local chip = entry and entry.keep and L.CHIP_KEEP or nil
+		local merchant = entry and ns.MerchantPrice and ns.MerchantPrice(entry.id)
+		if merchant then
+			local words = L.CHIP_AT_MERCHANT:format(U.Coins(merchant))
+			chip = chip and (chip .. U.SEPARATOR .. words) or words
+		end
+		row:Fill(entry, false, values, chip, "gold")
 	end
 	list.empty:SetShown(#rows == 0)
 end
@@ -53,7 +58,7 @@ end
 
 -- A name the game was fetching (heard only while the window is shown): drawn again.
 local names = CreateFrame("Frame")
-names:SetScript("OnEvent", U and U.Debounce and U.Debounce(0.3, function() if window and window:IsShown() then Gather() end end) or nil)
+names:SetScript("OnEvent", U.Debounce(0.3, function() if window and window:IsShown() then Gather() end end))
 
 -- How many you want to carry, asked (a click on its row, an item Shift+clicked, Wanderer Bags' menu): what the
 -- list wants already, else a stack. keep: always on you (true), once (false), as it is (nil).
@@ -70,35 +75,42 @@ local function Ask(id, keep)
 end
 
 local function Create()
-	window = Skin.CreateWindow("WandererShoppingList", "MEDIUM")
-	Skin.Dress(window, { "CENTER", UIParent, "CENTER", 260, 60 }, "shoppingListPos")
+	window = Skin.CreateWindow("WandererAuctionShoppingList", "MEDIUM")
+	Skin.Dress(window, { "CENTER", UIParent, "CENTER", 260, 60 }, "auctionShoppingPos")
 	window:SetSize(WIDTH, HEIGHT)
-	local _, title, margin = Skin.Header(window, "Wanderer", L.SHOPPING)
+	local _, title, margin = Skin.Header(window, "Wanderer", L.SHOPPING, { settings = "ext:auction" })
 	local intro = Skin.Text(window, "GameTooltipTextSmall", "muted")
 	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
 	intro:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	intro:SetJustifyH("LEFT")
 	intro:SetText(L.LIST_INTRO)
 	list = Skin.Table(window, {
-		nameTitle = L.COL_ITEM, width = WIDTH - margin * 2, rows = ROWS, action = 80,
-		-- A click: how many; a right click: always on you, or once.
-		onClick = function(entry, mouse)
-			if mouse ~= "RightButton" then return Ask(entry.id) end
-			local wanted = ns.Shopping()[entry.id]
-			if wanted then ns.SetShopping(entry.id, wanted.count or 1, nil, not wanted.keep) end
+		nameTitle = L.COL_ITEM, width = WIDTH - margin * 2, rows = ROWS,
+		-- A click (left or right): its card beside its row (how many, always on you, your highest price, off it).
+		onClick = function(entry)
+			local owner
+			for _, row in ipairs(list.rows) do if row.entry == entry then owner = row end end
+			ns.OpenShoppingCard(owner, entry.id)
 		end, onDraw = Draw,
 		columns = {
 			{ key = "what", title = L.COL_FOR, width = 130, justify = "LEFT" },
 			{ key = "have", title = L.COL_CARRIED, width = 70 },
 		},
 	})
-	list:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 74))
+	-- (under the intro, however many lines it takes in your language; the rows fitted on each show)
+	list:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -10)
 	list.empty:SetText(L.LIST_EMPTY)
-	list:Fit(HEIGHT - (margin + 74) - (margin + 64))
+	local function FitList()
+		local top = window:GetTop() and intro:GetBottom() and (window:GetTop() - intro:GetBottom() + 10) or (margin + 74)
+		list:Fit(HEIGHT - top - (margin + 64))
+	end
+	FitList()
 	-- At the auction house: all of them searched there (its own page).
 	window.search = Skin.Button(window, L.SEARCH_ALL, function()
+		-- (the auction house closed meanwhile: nothing to search there)
+		if not ns.AtAuction() then return window.search:Hide() end
 		window:Hide()
-		ns.Open("shopping")
+		ns.UseWanderer("shopping")
 	end, "main")
 	window.search:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
 	-- Buying on arrival at merchants, for this character (the option of Wanderer's settings, here too), and
@@ -112,7 +124,7 @@ local function Create()
 	window.fromBank = Skin.Check(window, L.LIST_FROMBANK, function() return ns.FromBank() end, function(value) ns.FromBank(value) end,
 		L.FROMBANK_DESC)
 	window.fromBank:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + 6)
-	window.cap = (Skin.SmallButton or Skin.CreateLink)(window, "", function()
+	window.cap = Skin.SmallButton(window, "", function()
 		Skin.AskText(L.LIST_CAP_ASK, tostring(ns.BuyCap()), function(text)
 			local gold = tonumber(text)
 			if gold and gold >= 1 then
@@ -129,15 +141,21 @@ local function Create()
 		self.fromBank:Refresh()
 		self.cap:SetLabel(L.LIST_CAP:format(U.Coins(ns.BuyCap() * 10000)))
 		self.cap:SetShown(ns.AutoBuy())
-		self:SetScale(Skin.Scale())
-		self.search:SetShown(ns.IsShown and ns.IsShown() or false)
+		self.search:SetShown(ns.AtAuction())
 		list.offset = 0
+		FitList()
+		self:SetScale(Skin.FitScale(self))
 		Gather()
 	end)
 	Skin.Get(window):Layout()
 end
 
 function ns.ToggleList()
+	-- (off means off: said, nothing opened)
+	if not ns.On() then
+		if window then window:Hide() end
+		return W.Print(L.EXT_TURNED_OFF:format(L.TITLE))
+	end
 	if not window then Create() end
 	window:SetShown(not window:IsShown())
 end
@@ -148,7 +166,14 @@ local function Badges()
 	if tab then
 		tab.count:SetText(lack > 0 and lack or "")
 	end
-	if type(WandererBagsMarks) == "table" and WandererBagsMarks.Refresh then WandererBagsMarks.Refresh() end
+	local marks = ns.Marks()
+	if marks.Refresh then marks.Refresh() end
+end
+
+-- Auction turned off or on: the merchant's tab with it, the list closed when off.
+function ns.ListFollowsSwitch()
+	if tab then tab:SetShown(ns.On()) end
+	if window and window:IsShown() and not ns.On() then window:Hide() end
 end
 
 -- The list changed: this window drawn again, the counts with it.
@@ -160,7 +185,7 @@ end
 -- On the merchant's window, a side tab (as the spellbook's): the list beside him.
 local function MerchantTab()
 	if tab or not MerchantFrame then return end
-	tab = CreateFrame("Button", "WandererShoppingTab", MerchantFrame)
+	tab = CreateFrame("Button", "WandererAuctionShoppingTab", MerchantFrame)
 	tab:SetSize(32, 32)
 	tab:SetPoint("TOPLEFT", MerchantFrame, "TOPRIGHT", 0, -48)
 	local ground = tab:CreateTexture(nil, "BACKGROUND")
@@ -182,11 +207,10 @@ local function MerchantTab()
 end
 
 -- For the other addons (Wanderer Bags' heading): the window, how many items it still lacks.
-if type(WandererAuction) == "table" then
-	WandererAuction.ToggleList = function() ns.ToggleList() end
-	WandererAuction.ShoppingLack = function() return ns.ShoppingLack() end
-	WandererAuction.AskShopping = function(id, keep) Ask(tonumber(id), keep) end
-end
+WandererAuction.ToggleList = function() ns.ToggleList() end
+WandererAuction.ShoppingLack = function() return ns.On() and ns.ShoppingLack() or 0 end -- (off: no count to show)
+WandererAuction.AskShopping = function(id, keep) if ns.TellOff() then Ask(tonumber(id), keep) end end
+ns.AskShopping = Ask -- (a result's card, Buy.lua)
 
 -- Wanderer's key binding (the game's key options, "Wanderer Auction").
 BINDING_HEADER_WANDERERAUCTION = "Wanderer Auction"
@@ -198,10 +222,16 @@ do
 	local events = CreateFrame("Frame")
 	pcall(events.RegisterEvent, events, "MERCHANT_SHOW")
 	pcall(events.RegisterEvent, events, "BAG_UPDATE_DELAYED")
+	pcall(events.RegisterEvent, events, "AUCTION_HOUSE_SHOW")
+	pcall(events.RegisterEvent, events, "AUCTION_HOUSE_CLOSED")
 	events:SetScript("OnEvent", function(_, event)
 		if event == "MERCHANT_SHOW" then
 			MerchantTab()
+			if tab then tab:SetShown(ns.On()) end
 			Badges()
+		elseif event == "AUCTION_HOUSE_SHOW" or event == "AUCTION_HOUSE_CLOSED" then
+			-- (the button in step with the auction house: read from the event, Window.lua may hear it after)
+			if window then window.search:SetShown(event == "AUCTION_HOUSE_SHOW" and ns.On() or false) end
 		elseif window and window:IsShown() then
 			Gather()
 		end
@@ -212,7 +242,8 @@ end
 -- house): added, how many asked.
 if hooksecurefunc and ChatEdit_InsertLink then
 	hooksecurefunc("ChatEdit_InsertLink", function(link)
-		local shown = (window and window:IsShown()) or (ns.ShoppingPageShown and ns.ShoppingPageShown())
+		if not ns.On() or (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) then return end
+		local shown = (window and window:IsShown()) or ns.ShoppingPageShown()
 		if shown then Ask(U.ItemID(link)) end
 	end)
 end

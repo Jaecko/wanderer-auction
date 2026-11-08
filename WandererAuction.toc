@@ -12,18 +12,19 @@
 ## Notes-zhCN: Wanderer 窗口中的拍卖行：出售、购买、你的拍卖和竞标；为你找到最低价，绝不低于商人收购价。
 ## Notes-zhTW: Wanderer 視窗中的拍賣場：出售、購買、你的拍賣和競標；為你找到最低價，絕不低於商人收購價。
 ## Category: Auction
-## Version: 0.5.3
+## Version: 1.2.0
 ## X-Curse-Project-ID: 1739533
 ## Author: Jaekco
 ## IconTexture: Interface\Icons\INV_Misc_Coin_01
 ## RequiredDeps: Wanderer
 ## OptionalDeps: WandererBags, Auctionator
-## SavedVariables: WandererAuctionDB
+## SavedVariables: WandererAuctionDB, WandererAuctionAccountDB
 ## X-Website: https://wanderer-addon.com
 
 Locales.lua
 Locales\[TextLocale].lua
 Prices.lua
+Debug.lua
 Window.lua
 Log.lua
 Sell.lua
@@ -32,6 +33,8 @@ Follow.lua
 History.lua
 Shopping.lua
 ShoppingList.lua
+ShoppingCard.lua
 Crafting.lua
 Merchant.lua
 Banker.lua
+Town.lua

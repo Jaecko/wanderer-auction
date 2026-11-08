@@ -12,8 +12,8 @@ local Skin = W and W.Skin
 local WIDTH, HEIGHT = 340, 440
 local KEEP = 300 -- lines kept
 local TONES = { -- (the line's own color: an item's link inside it gives it back after its name)
-	title = { 1, 0.82, 0 }, good = { 0.56, 0.88, 0.64 }, none = { 0.6, 0.58, 0.54 }, bad = { 0.88, 0.63, 0.25 },
-	text = { 0.85, 0.82, 0.75 },
+	title = Skin.COLORS.gold, good = Skin.COLORS.good, none = Skin.COLORS.muted, bad = Skin.COLORS.warn,
+	text = Skin.COLORS.soft,
 }
 
 local window, box
@@ -23,7 +23,7 @@ local function Create()
 	window = Skin.CreateWindow("WandererAuctionLog", "MEDIUM")
 	-- (beside the auction house's window, the first time; then where you put it)
 	local main = ns.MainWindow and ns.MainWindow()
-	Skin.Dress(window, main and { "TOPLEFT", main, "TOPRIGHT", 8, 0 } or nil, "auctionLog")
+	Skin.Dress(window, main and { "TOPLEFT", main, "TOPRIGHT", 8, 0 } or nil, "auctionLogPos")
 	-- (Escape closes the auction house's window, not only this one: left out of the game's list)
 	for index = #(UISpecialFrames or {}), 1, -1 do
 		if UISpecialFrames[index] == "WandererAuctionLog" then table.remove(UISpecialFrames, index) end
@@ -32,11 +32,11 @@ local function Create()
 	if main then main:HookScript("OnHide", function() window:Hide() end) end
 	window:SetSize(WIDTH, HEIGHT)
 	Skin.Get(window):Layout()
-	local _, title, margin = Skin.Header(window, "Wanderer Auction", L.LOG_TITLE)
+	local _, title, margin = Skin.Header(window, "Wanderer", L.LOG_TITLE)
 	box = CreateFrame("ScrollingMessageFrame", nil, window)
 	box:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
 	box:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
-	box:SetFontObject("GameFontHighlightSmall")
+	box:SetFontObject(Skin.FontFor("GameFontHighlightSmall"))
 	box:SetJustifyH("LEFT")
 	box:SetFading(false)
 	box:SetMaxLines(KEEP)
@@ -60,7 +60,7 @@ end
 
 function ns.ShowLog()
 	if not window then Create() end
-	window:SetScale(Skin.Scale())
+	window:SetScale(Skin.FitScale(window))
 	window:Show()
 end
 
