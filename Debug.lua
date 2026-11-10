@@ -60,7 +60,6 @@ local function Value(value)
 	end
 	return copy
 end
-ns.DebugValue = Value -- (tests)
 
 local Listen -- (below: the game's answers heard, or no more)
 local function Stop(quiet)
@@ -217,5 +216,3 @@ login:SetScript("OnEvent", function(self, event, isLogin, isReload)
 	Listen(true)
 	ns.Debug("session resumed after a reload")
 end)
-ns.DebugListener = listener -- (tests)
-ns.DebugStop = Stop -- (tests)

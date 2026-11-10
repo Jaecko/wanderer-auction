@@ -50,7 +50,6 @@ local function Learn()
 		end
 	end
 end
-ns.LearnMerchant = Learn
 
 -- What one costs at a merchant (copper), nil when no merchant was seen selling it.
 function ns.MerchantPrice(id)

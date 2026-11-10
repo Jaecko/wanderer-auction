@@ -257,7 +257,6 @@ local function Odd(entry, buyout, bid)
 	if kind == "high" then return L.ALERT_PRICE_HIGH:format(math.floor(unit / usual * 10 + 0.5) / 10, U.Coins(usual)) end
 	return nil
 end
-ns.SellOdd = Odd -- (tests)
 
 -- The item still in its bag place (slot: { bag, slot }, else the entry's own): the bags may change meanwhile.
 local function InPlace(entry, slot)

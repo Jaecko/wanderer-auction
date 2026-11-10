@@ -172,7 +172,6 @@ local function CancelNext()
 	-- (unanswered: the button given back once the wait is over)
 	C_Timer.After(10.1, UpdateTakeBack)
 end
-ns.TakeBackNext = CancelNext -- (tests)
 
 -- The queue card shown (the table beside it) or put away.
 function TakeBack(on)
@@ -506,7 +505,13 @@ ns.Listen("ITEM_KEY_ITEM_INFO_RECEIVED", function(itemID)
 	end
 	if again then gatherSoon() end
 end)
-ns.Listen("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", function() if looking and ns.browsing == "follow" then ReadLooked() end end)
+ns.Listen("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", function()
+	if not looking then return end
+	if ns.browsing == "follow" then return ReadLooked() end
+	-- (another page's search took its place: no answer will come, the button given back)
+	looking = false
+	Draw()
+end)
 ns.Listen("AUCTION_HOUSE_BROWSE_FAILURE", function()
 	if not looking then return end
 	looking = false

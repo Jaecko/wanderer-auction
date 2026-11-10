@@ -709,7 +709,7 @@ function DrawRecent()
 				box:ClearFocus()
 				Browse(self.search)
 			end, L.RECENT_SEARCH_DESC, 20)
-			button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+			button:RegisterForClicks("LeftButtonUp", "RightButtonUp") button.padRight = true
 			recent[index] = button
 		end
 		if button then
@@ -956,7 +956,8 @@ local function Shown()
 	end
 	if chosen and chosen.unread then Look() end
 	DrawResults()
-	if box and (box:GetText() or "") == "" and not category then box:SetFocus() end
+	-- (with a controller nothing is typed: the keys stay on the buttons)
+	if box and (box:GetText() or "") == "" and not category and not (U.UsingPad and U.UsingPad()) then box:SetFocus() end
 end
 
 local function Closed()
