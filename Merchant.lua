@@ -143,7 +143,7 @@ function ns.RefreshMerchant()
 	end
 end
 
-do
+ns.AtStart(function()
 	local events = CreateFrame("Frame")
 	-- (his list learned on arrival, then once after a run of changes: each purchase or sale sends one)
 	local learnLater = U and U.Debounce and U.Debounce(1, function() if open and ns.On() then Learn() end end)
@@ -176,4 +176,4 @@ do
 	pcall(events.RegisterEvent, events, "MERCHANT_CLOSED")
 	-- Its pages and tabs turned: the links with them.
 	if MerchantFrame_Update then hooksecurefunc("MerchantFrame_Update", function() ns.RefreshMerchant() end) end
-end
+end)

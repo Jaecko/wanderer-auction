@@ -46,6 +46,13 @@ local function Create()
 	box:SetScript("OnMouseWheel", function(self, delta)
 		if delta > 0 then self:ScrollUp() else self:ScrollDown() end
 	end)
+	-- (a controller's stick goes back through it too)
+	if Skin.PadWindow then
+		Skin.PadWindow(window, { wheel = function(delta)
+			if delta > 0 then box:ScrollUp() else box:ScrollDown() end
+			return true
+		end })
+	end
 	for _, line in ipairs(lines) do box:AddMessage(line[1], line[2], line[3], line[4]) end
 end
 
@@ -77,3 +84,4 @@ function ns.LogLines()
 	for index, line in ipairs(lines) do words[index] = line[1] end
 	return words
 end
+

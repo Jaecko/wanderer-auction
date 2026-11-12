@@ -1,7 +1,4 @@
-# Wanderer Auction 1.2.2
+# Wanderer Auction 1.2.3
 
 ### Changed
-- With the game's controller interface on, the Buy page leaves the search box alone, and the top button forgets a recent search. The controller navigation needs Wanderer 1.4.36 or later.
-
-### Fixed
-- The "Look up" button no longer stays greyed after switching pages.
+- A finer look across the family: one palette for every color, clearer contrast on dark windows and on parchment, the same words in every language.

@@ -101,7 +101,7 @@ local function Step()
 	if ns.RefreshShopping then ns.RefreshShopping() end
 end
 
-do
+ns.AtStart(function()
 	local events = CreateFrame("Frame")
 	pcall(events.RegisterEvent, events, "BANKFRAME_OPENED")
 	pcall(events.RegisterEvent, events, "BANKFRAME_CLOSED")
@@ -116,4 +116,4 @@ do
 		taken, steps = {}, 0
 		C_Timer.After(0.5, Step)
 	end)
-end
+end)

@@ -7,7 +7,9 @@ local L = ns.L
 local W = Wanderer
 local U = W and W.Util
 
-if W and W.TownLine and U then
+-- (once Wanderer's check has passed: ns.Start, Window.lua)
+ns.AtStart(function()
+	if not (W.TownLine and U) then return end
 	W.TownLine(function()
 		if not ns.On() then return nil end
 		local lack, atMerchant = 0, 0
@@ -25,4 +27,4 @@ if W and W.TownLine and U then
 				if not (list and list:IsShown()) then ns.ToggleList() end
 			end }
 	end, "shopping")
-end
+end)

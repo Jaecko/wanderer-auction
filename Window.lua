@@ -59,7 +59,10 @@ function ns.AddPage(name, label, build, onShow, onClose, badge, badgeTone)
 end
 
 -- What a page says under the heading's "?" (what can be done there, its keys).
-function ns.PageHelp(name, text) if pages[name] then pages[name].help = text end end
+-- (padText: the same said for a controller, its buttons instead of the mouse's)
+function ns.PageHelp(name, text, padText)
+	if pages[name] then pages[name].help, pages[name].helpPad = text, padText end
+end
 
 -- The keys a page answers while it is shown and the pointer is over the window: onKey(key) gives true when it
 -- took the key (it then goes no further), false to leave it to the game.
@@ -177,6 +180,11 @@ function Create()
 		if page.help then
 			page.helpLink = Skin.Help(window, page.help, "HEADING")
 			page.helpLink:Hide()
+			if page.helpPad then
+				page.helpLink:HookScript("OnEnter", function(self)
+					if U.UsingPad and U.UsingPad() then Skin.ShowTip(self, page.helpPad, "ANCHOR_BOTTOM") end
+				end)
+			end
 		end
 	end
 	-- Keys: the page's, while the pointer is over the window (never a key taken from the game by surprise).
@@ -290,7 +298,8 @@ function ns.PriceBox(parent, opts)
 	end)
 	input:HookScript("OnEditFocusLost", function(self)
 		self:SetText("")
-		self.edges.Color(1, 0.82, 0, 0.12)
+		local gold = W.Skin.COLORS.gold
+		self.edges.Color(gold[1], gold[2], gold[3], 0.12)
 		Show()
 	end)
 	input:SetScript("OnTextChanged", function(self, typed)
@@ -315,6 +324,32 @@ function ns.PriceBox(parent, opts)
 	if opts.tip then Skin.Tooltip(input, opts.tip, "ANCHOR_TOP") end
 	Show()
 	return box
+end
+
+-- An amount one step up or down (a controller's cross): 1 silver under 1 gold, 10 silver under 10 gold, 1 gold
+-- above; never under the floor (nothing by default).
+local SILVER, GOLD = 100, 10000
+function ns.MoneyStep(now, direction, floor)
+	now = now or 0
+	-- (going down, the step is the one of the amount just under)
+	local measure = direction > 0 and now or now - 1
+	local size = measure < GOLD and SILVER or measure < 10 * GOLD and 10 * SILVER or GOLD
+	return math.max(floor or 0, now + direction * size)
+end
+
+-- A price box a controller steps, nothing typed: reached by the pad, the cross's left and right step it, said
+-- under it when it stops there. title: the tooltip's first line; floor(): the least it takes (nothing: 0);
+-- onStep(copper) once stepped.
+function ns.PadSteps(box, title, floor, onStep)
+	box:EnableMouse(true)
+	box.padTip = true
+	box.padAdjust = function(self, delta)
+		local copper = ns.MoneyStep(self:Get(), delta > 0 and 1 or -1, floor and floor() or 0)
+		if copper == self:Get() then return end
+		self:Set(copper)
+		onStep(copper)
+	end
+	Skin.Tooltip(box, function() return (U.UsingPad and U.UsingPad()) and { title, L.HIGHEST_STEPS_PAD } or nil end, "ANCHOR_TOP")
 end
 
 -- Your money, at the top.
@@ -513,6 +548,8 @@ function ns.Init()
 	})
 	pcall(events.RegisterEvent, events, "AUCTION_HOUSE_SHOW")
 	pcall(events.RegisterEvent, events, "AUCTION_HOUSE_CLOSED")
+	-- (each file's events, hooks and town line, the table for the other addons: only now)
+	ns.Start()
 	ns.InitTooltip()
 	SLASH_WANDERERAUCTION1 = "/wauction"
 	-- ("/wauction debug": a debug session on or off, "/wauction debug clear": emptied; see Debug.lua)

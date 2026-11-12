@@ -29,7 +29,7 @@ ns.DebugStore = Store -- (tests)
 
 -- A value as it can be written: a secret one said so, a string cut, a table copied one level deep (its own
 -- tables named only), a function or a frame by its kind.
-local function IsSecret(value) return issecretvalue ~= nil and issecretvalue(value) or false end
+local IsSecret = W and W.Util and W.Util.IsSecret or function() return false end
 local function Plain(value)
 	if IsSecret(value) then return "<secret>" end
 	local kind = type(value)
@@ -196,23 +196,25 @@ function ns.DebugCommand(rest)
 end
 
 -- At login: a session left on (a /reload keeps it going, a new login ends it; its lines kept).
-local login = CreateFrame("Frame")
-login:RegisterEvent("PLAYER_LOGIN")
-login:RegisterEvent("PLAYER_ENTERING_WORLD")
-login:SetScript("OnEvent", function(self, event, isLogin, isReload)
-	if event == "PLAYER_LOGIN" then return end
-	self:UnregisterAllEvents()
-	local store = Store()
-	-- (a session ended more than a week ago: its lines let go, the account's file kept small)
-	if not store.on and store.stopped and time() - store.stopped > KEPT_AFTER and store.entries[1] then store.entries = {} end
-	if not store.on then return end
-	if isLogin and not isReload or time() - (store.started or 0) > LASTS then
-		Stop(true)
-		return
-	end
-	-- (a /reload in the middle: going on, from where it was)
-	ns.debugging = true
-	WrapErrorHandler()
-	Listen(true)
-	ns.Debug("session resumed after a reload")
+ns.AtStart(function()
+	local login = CreateFrame("Frame")
+	login:RegisterEvent("PLAYER_LOGIN")
+	login:RegisterEvent("PLAYER_ENTERING_WORLD")
+	login:SetScript("OnEvent", function(self, event, isLogin, isReload)
+		if event == "PLAYER_LOGIN" then return end
+		self:UnregisterAllEvents()
+		local store = Store()
+		-- (a session ended more than a week ago: its lines let go, the account's file kept small)
+		if not store.on and store.stopped and time() - store.stopped > KEPT_AFTER and store.entries[1] then store.entries = {} end
+		if not store.on then return end
+		if isLogin and not isReload or time() - (store.started or 0) > LASTS then
+			Stop(true)
+			return
+		end
+		-- (a /reload in the middle: going on, from where it was)
+		ns.debugging = true
+		WrapErrorHandler()
+		Listen(true)
+		ns.Debug("session resumed after a reload")
+	end)
 end)

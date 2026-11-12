@@ -17,6 +17,8 @@ local BODY_WIDTH, BODY_HEIGHT = TILES * TILE_WIDTH + (TILES - 1) * TILE_GAP, 28
 local card -- made at its first use
 local Fill -- (below)
 
+local function Pad() return U.UsingPad and U.UsingPad() end
+
 local function Entry() return card and card.id and ns.Shopping()[card.id] or nil end
 
 -- How many a step moves: 1, 5 with Shift, 20 with Ctrl.
@@ -26,10 +28,21 @@ local function StepSize()
 	return 1
 end
 
-local function Step(direction)
+-- How many changed by this many (the steps, and a controller's moves).
+local function Move(by)
 	local entry = Entry()
 	if not entry then return end
-	ns.SetShoppingCount(card.id, (entry.count or 1) + direction * StepSize())
+	ns.SetShoppingCount(card.id, (entry.count or 1) + by)
+	Fill()
+end
+
+local function Step(direction) Move(direction * StepSize()) end
+
+-- The highest price one step up or down (a controller's cross, ns.MoneyStep); never under nothing.
+local function StepMax(direction)
+	local entry = Entry()
+	if not entry then return end
+	ns.SetShoppingMax(card.id, ns.MoneyStep(entry.max or 0, direction))
 	Fill()
 end
 
@@ -57,9 +70,14 @@ local function Create()
 	local more = Skin.Button(card.counter, "+", function() Step(1) end, nil, 32)
 	more:SetHeight(26)
 	more:SetPoint("LEFT", card.count, "RIGHT", 6, 0)
-	local steps = Skin.Text(card.counter, "GameTooltipTextSmall", "muted")
-	steps:SetPoint("LEFT", more, "RIGHT", 10, 0)
-	steps:SetText(L.CARD_STEPS)
+	-- (a controller: the cross's left and right step one, its left button five more)
+	for _, button in ipairs({ less, more }) do
+		button.padAdjust = function(_, delta) Move(delta > 0 and 1 or -1) end
+		button.padAlt, button.padAltWord = function() Move(5) end, L.PAD_FIVE_MORE
+	end
+	card.steps = Skin.Text(card.counter, "GameTooltipTextSmall", "muted")
+	card.steps:SetPoint("LEFT", more, "RIGHT", 10, 0)
+	card.steps:SetText(L.CARD_STEPS)
 	card.highest = CreateFrame("Frame", nil, card)
 	card.highest:SetSize(BODY_WIDTH, BODY_HEIGHT)
 	card.highest:Hide()
@@ -67,6 +85,11 @@ local function Create()
 		if card.id then ns.SetShoppingMax(card.id, copper) end
 	end })
 	card.money:SetPoint("LEFT")
+	-- (a controller: nothing typed, the cross's left and right step the price, said when it stops on it)
+	card.money:EnableMouse(true)
+	card.money.padTip = true
+	card.money.padAdjust = function(_, delta) StepMax(delta > 0 and 1 or -1) end
+	Skin.Tooltip(card.money, function() return Pad() and { L.TILE_HIGHEST, L.HIGHEST_STEPS_PAD } or nil end, "ANCHOR_TOP")
 	card.noMax = Skin.SmallButton(card.highest, L.NO_MAX_BUTTON, function()
 		if not card.id then return end
 		ns.SetShoppingMax(card.id, nil)
@@ -86,7 +109,7 @@ end
 -- The tiles: how many (its number), always on you, your highest price, off the list.
 local function Tiles(id, entry)
 	return {
-		{ sign = { text = entry.count or 1 }, label = L.TILE_HOW_MANY, tip = L.TILE_HOW_MANY_DESC, on = card.panel == "count",
+		{ sign = { text = entry.count or 1 }, label = L.TILE_HOW_MANY, tip = Pad() and L.TILE_HOW_MANY_DESC_PAD or L.TILE_HOW_MANY_DESC, on = card.panel == "count",
 			stay = true, run = function()
 				card.panel = "count"
 				Fill()
@@ -100,7 +123,8 @@ local function Tiles(id, entry)
 			on = card.panel == "max" or entry.max ~= nil, stay = true, run = function()
 				card.panel = "max"
 				Fill()
-				card.money.input:SetFocus()
+				-- (with a controller nothing is typed: the cross steps the price instead)
+				if not (U.UsingPad and U.UsingPad()) then card.money.input:SetFocus() end
 			end },
 		{ sign = { glyph = "close" }, label = L.REMOVE, tip = L.TILE_REMOVE_DESC, run = function() ns.RemoveFromShopping(id) end },
 	}
@@ -120,6 +144,7 @@ function Fill()
 	local merchant = ns.MerchantPrice and ns.MerchantPrice(id)
 	if merchant and not ns.AtAuction() then now = now .. U.SEPARATOR .. L.CHIP_AT_MERCHANT:format(U.Coins(merchant)) end
 	card.count:SetText(tostring(want))
+	card.steps:SetText(Pad() and L.CARD_STEPS_PAD or L.CARD_STEPS)
 	if not card.money.input:HasFocus() then card.money:Set(entry.max or 0) end
 	-- At the auction house: searched now.
 	local rows = {}

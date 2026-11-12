@@ -19,6 +19,21 @@ function ns.Marks()
 	return type(WandererBagsMarks) == "table" and WandererBagsMarks or NONE
 end
 
+-- What each file starts once Wanderer's check has passed (Init, Window.lua): no event heard, no hook, no table
+-- for the other addons before it (an older Wanderer: nothing of Auction runs).
+ns.starts = {}
+function ns.AtStart(start)
+	-- (a file read after Init: started at once)
+	if ns.started then return start() end
+	ns.starts[#ns.starts + 1] = start
+end
+function ns.Start()
+	if ns.started then return end
+	ns.started = true
+	WandererAuction = ns.public
+	for _, start in ipairs(ns.starts) do start() end
+end
+
 -- A debug session (Debug.lua): off, nothing written, until that file says otherwise.
 ns.debugging = false
 function ns.Debug() end
@@ -301,13 +316,11 @@ end
 
 -- How fresh a remembered price is: a small dot before it, green when seen within the hour, gold within the
 -- day, grey older (Wanderer's own dot, in the kit's colors). "" when no price was seen.
-local DOT = "|TInterface\\AddOns\\Wanderer\\Media\\Glyphs:10:10:0:0:128:16:96:112:0:16:%d:%d:%d|t "
 function ns.Fresh(id)
 	local price, age = ns.Price(id)
 	if not price then return "" end
 	local role = age < HOUR and "good" or age < DAY and "gold" or "muted"
-	local c = W.Skin.COLORS[role]
-	return DOT:format(math.floor(c[1] * 255), math.floor(c[2] * 255), math.floor(c[3] * 255))
+	return W.Skin.GlyphText("dot", role, 10) .. " "
 end
 
 -- Money typed: "1.5" (1g 50s), "1,05" (1g 5s), "12" (12g), "1g50s", "75s", "30c", "1 g 50 s", or the client's own
@@ -468,9 +481,13 @@ local POOR = Enum and Enum.ItemQuality and Enum.ItemQuality.Poor or 0
 function ns.JunkRule(id, quality)
 	if not ns.MadeJunk(id) then return nil end
 	local marks = ns.Marks()
-	local ok, junk = pcall(function() return type(marks.IsJunk) == "function" and marks.IsJunk(id) or false end)
-	-- (Wanderer Bags unable to say: still waiting for your click)
-	if ok and not junk then
+	local isJunk = type(marks) == "table" and marks.IsJunk or nil
+	local ok, junk = true, false
+	if type(isJunk) == "function" then ok, junk = pcall(isJunk, id) end
+	-- (Wanderer Bags switched off: it says nothing, the mark kept for when it is back)
+	if ok and junk == nil then return nil end
+	-- (Wanderer Bags unable to say: still waiting for your click; only a clear no forgets it)
+	if ok and junk == false then
 		ns.MadeJunk(id, false)
 		return nil
 	end
@@ -642,18 +659,20 @@ function ns.PruneShopping()
 	end
 	if ns.RefreshShopping then ns.RefreshShopping() end
 end
-do
+ns.AtStart(function()
 	local bags = CreateFrame("Frame")
 	pcall(bags.RegisterEvent, bags, "BAG_UPDATE_DELAYED")
 	bags:SetScript("OnEvent", U.Debounce(1, function()
 		-- (the addon switched off: its list left as it is, nothing said)
 		if ns.On and ns.On() and next(ns.Shopping()) then ns.PruneShopping() end
 	end))
-end
+end)
 
--- For the other addons (Wanderer Bags): the price of an item by its link, and its age in days.
-WandererAuction = {
+-- For the other addons (Wanderer Bags): the price of an item by its link, and its age in days (switched off:
+-- none, as everything else here). Given as WandererAuction by Init only.
+ns.public = {
 	Price = function(link)
+		if not (ns.On and ns.On()) then return nil end
 		local price, age = ns.Price(ItemID(link))
 		return price, age and math.floor(age / DAY) or nil
 	end,
@@ -668,7 +687,8 @@ WandererAuction = {
 		if not ns.TellOff(quiet) then return false end
 		return ns.AddToShopping(id, count, note, quiet)
 	end,
-	InShopping = function(id) return ns.Shopping()[tonumber(id) or -1] ~= nil end,
+	-- (Auction switched off: nothing on its list, nothing taken off it)
+	InShopping = function(id) return (ns.On and ns.On()) and ns.Shopping()[tonumber(id) or -1] ~= nil or false end,
 	-- How many you want to carry, set by hand; how many the list wants (nil: not on it); off it.
 	SetShopping = function(id, count, note, keep)
 		if not ns.TellOff() then return false end
@@ -676,14 +696,19 @@ WandererAuction = {
 	end,
 	-- A line always on you (true), else nil.
 	IsAlways = function(id)
+		if not (ns.On and ns.On()) then return nil end
 		local entry = ns.Shopping()[tonumber(id) or -1]
 		return entry and entry.keep or nil
 	end,
 	ShoppingCount = function(id)
+		if not (ns.On and ns.On()) then return nil end
 		local entry = ns.Shopping()[tonumber(id) or -1]
 		return entry and entry.count or nil
 	end,
-	RemoveFromShopping = function(id) return ns.RemoveFromShopping(tonumber(id)) end,
+	RemoveFromShopping = function(id)
+		if not (ns.On and ns.On()) then return false end
+		return ns.RemoveFromShopping(tonumber(id))
+	end,
 }
 
 -- Over an item, its price at the auction house (only without Auctionator: it says it already).

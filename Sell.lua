@@ -451,7 +451,8 @@ local function UpdateSale()
 	detail.post:SetEnabled(detail.canPost)
 	-- (waiting for the auction house, then ready for your click; else as it is)
 	detail.post:SetText(detail.order and L.POST_QUEUED or detail.readyAgain and L.POST_READY or L.POST)
-	detail.post.keyLabel:SetShown(not detail.order)
+	-- (no key under a controller)
+	detail.post.keyLabel:SetShown(not detail.order and not (U.UsingPad and U.UsingPad()))
 	detail.post.wait:SetShown(detail.order and true or false)
 	detail.loading:SetShown(selected.key ~= nil and not selected.searched)
 	detail.what:SetText(L.POST_WHAT:format(quantity, selected.name or ""))
@@ -1402,7 +1403,7 @@ function UpdateBatch()
 	else
 		b.post:SetText(batch.posted > 0 and L.SELL_ALL_FINISHED:format(batch.posted) or L.SELL_ALL_NONE)
 	end
-	b.post.keyLabel:SetShown(first ~= nil and not batch.order)
+	b.post.keyLabel:SetShown(first ~= nil and not batch.order and not (U.UsingPad and U.UsingPad()))
 	if b.post.wait then b.post.wait:SetShown(batch.order and true or false) end
 	b.post:SetEnabled(first ~= nil and not Waiting())
 	Draw()
@@ -1561,12 +1562,13 @@ local function BuildBatch(page)
 	summary:SetPoint("RIGHT", card, "RIGHT", -pad, 0)
 	summary:SetHeight(18)
 	summary:EnableMouse(true)
+	summary.padTip = true -- (a controller reaches it to read it)
 	b.summary = Skin.Text(summary, "GameTooltipText", "soft")
 	b.summary:SetPoint("LEFT")
 	Skin.Tooltip(summary, function()
-		local totals = b.totals or {}
-		return { L.SELL_ALL, { L.DEPOSIT_LINE .. ": " .. U.Coins(totals.deposit or 0), 0.9, 0.88, 0.82 },
-			{ L.MERCHANT_LINE .. ": " .. U.Coins(totals.merchant or 0), 0.9, 0.88, 0.82 } }
+		local totals, ink = b.totals or {}, Skin.COLORS.text
+		return { L.SELL_ALL, { L.DEPOSIT_LINE .. ": " .. U.Coins(totals.deposit or 0), ink[1], ink[2], ink[3] },
+			{ L.MERCHANT_LINE .. ": " .. U.Coins(totals.merchant or 0), ink[1], ink[2], ink[3] } }
 	end)
 	-- The next one.
 	b.next = CreateFrame("Frame", nil, card)
@@ -1597,7 +1599,7 @@ local function BuildBatch(page)
 	b.post.wait = WaitBar(b.post)
 	b.post.wait:SetPoint("BOTTOMLEFT", b.post, "BOTTOMLEFT", 1, 1)
 	b.post.wait:SetPoint("BOTTOMRIGHT", b.post, "BOTTOMRIGHT", -1, 1)
-	Skin.Tooltip(b.post, L.QUEUE_POST_DESC, "ANCHOR_TOP")
+	Skin.Tooltip(b.post, function() return (U.UsingPad and U.UsingPad()) and L.QUEUE_POST_DESC_PAD or L.QUEUE_POST_DESC end, "ANCHOR_TOP")
 	b.status = Skin.Text(card, "GameTooltipTextSmall", "muted")
 	b.status:SetPoint("TOPLEFT", b.post, "BOTTOMLEFT", 0, -8)
 	b.status:SetPoint("RIGHT", card, "RIGHT", -pad, 0)
@@ -1733,7 +1735,7 @@ local function Build(page)
 		line.ground:SetColorTexture(1, 1, 1, 0.03)
 		line.mine = line:CreateTexture(nil, "BACKGROUND", nil, 1)
 		line.mine:SetAllPoints()
-		line.mine:SetColorTexture(1, 0.82, 0, 0.1)
+		line.mine:SetColorTexture(Skin.COLORS.gold[1], Skin.COLORS.gold[2], Skin.COLORS.gold[3], Skin.CHOSEN or 0.1)
 		line.price = Skin.Text(line, "GameTooltipTextSmall", "text")
 		line.price:SetPoint("LEFT", line, "LEFT", 8, 0)
 		line.count = Skin.Text(line, "GameTooltipTextSmall", "muted")
@@ -1793,9 +1795,11 @@ local function Build(page)
 		if not up and price >= unit then price = unit - step end
 		SetPrice(math.max(step, price))
 	end
-	detail.stepDown = Skin.SmallButton(middle, "-5 %", function() Stepped(0.95) end, L.STEP_DOWN_DESC, 26)
+	detail.stepDown = Skin.SmallButton(middle, "-5 %", function() Stepped(0.95) end,
+		function() return (U.UsingPad and U.UsingPad()) and L.STEP_DOWN_DESC_PAD or L.STEP_DOWN_DESC end, 26)
 	detail.stepDown:SetPoint("TOPLEFT", detail.price, "BOTTOMLEFT", 0, -8)
-	detail.stepUp = Skin.SmallButton(middle, "+5 %", function() Stepped(1.05) end, L.STEP_UP_DESC, 26)
+	detail.stepUp = Skin.SmallButton(middle, "+5 %", function() Stepped(1.05) end,
+		function() return (U.UsingPad and U.UsingPad()) and L.STEP_UP_DESC_PAD or L.STEP_UP_DESC end, 26)
 	detail.stepUp:SetPoint("LEFT", detail.stepDown, "RIGHT", 6, 0)
 	detail.stepped = Stepped
 	detail.reset = Skin.CreateLink(middle, L.PRICE_RESET, function()
@@ -1836,13 +1840,15 @@ local function Build(page)
 	bidLabel:SetText(L.START_BID)
 	detail.bid = ns.PriceBox(detail.bidLine, { width = 150, height = 26, onChange = Typed, tip = L.PRICE_FIELD_DESC })
 	detail.bid:SetPoint("LEFT", bidLabel, "RIGHT", 10, 0)
+	-- (a controller: nothing typed, the cross steps the starting bid)
+	ns.PadSteps(detail.bid, L.START_BID, nil, Typed)
 	detail.bidLine:Hide()
 	-- The button (its key inside), the money above it, how many and how long above that.
 	detail.post = Skin.Button(middle, L.POST, Post, "main")
 	detail.post:SetPoint("BOTTOMLEFT")
 	detail.post:SetPoint("BOTTOMRIGHT")
 	ns.KeyLabel(detail.post, L.SPACE_KEY)
-	Skin.Tooltip(detail.post, L.POST_DESC, "ANCHOR_TOP")
+	Skin.Tooltip(detail.post, function() return (U.UsingPad and U.UsingPad()) and L.POST_DESC_PAD or L.POST_DESC end, "ANCHOR_TOP")
 	detail.post.wait = WaitBar(detail.post)
 	detail.post.wait:SetPoint("BOTTOMLEFT", detail.post, "BOTTOMLEFT", 1, 1)
 	detail.post.wait:SetPoint("BOTTOMRIGHT", detail.post, "BOTTOMRIGHT", -1, 1)
@@ -1855,6 +1861,7 @@ local function Build(page)
 	summary:SetPoint("RIGHT", middle, "RIGHT", 0, 0)
 	summary:SetHeight(66)
 	summary:EnableMouse(true)
+	summary.padTip = true -- (a controller reaches it to read it)
 	detail.net = Skin.SummaryLine(summary, nil, L.YOU_RECEIVE, true)
 	detail.merchant = Skin.SummaryLine(summary, detail.net, L.MERCHANT_LINE)
 	Skin.Tooltip(summary, function()
@@ -1937,7 +1944,7 @@ local function Closed()
 end
 
 ns.AddPage("sell", L.SELL, Build, Shown, Closed)
-ns.PageHelp("sell", L.HELP_SELL)
+ns.PageHelp("sell", L.HELP_SELL, L.HELP_SELL_PAD)
 
 -- The keys of the page (the pointer over the window): the arrows choose the item above or below, Ctrl with them
 -- steps the price 5 % up or down, Space or Enter posts; selling everything, Space or Enter posts the next one

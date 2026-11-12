@@ -267,11 +267,11 @@ end
 
 -- The game's profession window comes with its own addon, loaded the first time it opens. (Not with an older
 -- Wanderer: Init takes nothing then, Window.lua.)
-if (W.API or 1) >= 17 then
+ns.AtStart(function()
 	local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
 	if loaded and Clean(Safe(loaded, "Blizzard_Professions")) then
 		Build()
 	elseif W.WhenLoaded then
 		W.WhenLoaded("Blizzard_Professions", Build)
 	end
-end
+end)

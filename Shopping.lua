@@ -25,6 +25,10 @@ local asked = {} -- item ids a search of this visit asked (one added since: sear
 local sent = {} -- those of the search waiting for its answer
 local covered = {} -- those the last answer covered (the others: no chip yet)
 local searching, pending = false, false
+-- (the empty list's words: how to add an item, the pad's left button under the pad)
+local function EmptyWords()
+	return (U and U.UsingPad and U.UsingPad()) and L.LIST_EMPTY_PAD or L.LIST_EMPTY
+end
 local detail = {}
 
 local Ready = ns.Ready
@@ -134,7 +138,7 @@ local function ReadResults()
 	for id, price in pairs(best) do ns.Remember(id, price) end
 	searched, searching, covered = true, false, sent
 	Skin.Waiting(list.empty)
-	list.empty:SetText(L.LIST_EMPTY)
+	list.empty:SetText(EmptyWords())
 	Draw()
 end
 
@@ -145,7 +149,7 @@ local function LetGo()
 	searching = false
 	wipe(asked)
 	Skin.Waiting(list.empty)
-	list.empty:SetText(L.LIST_EMPTY)
+	list.empty:SetText(EmptyWords())
 end
 
 -- A click (left or right): its card beside its row.
@@ -178,11 +182,12 @@ local function Build(page)
 	function page:Fit(height) list:Fit(height - 44) end
 	page:HookScript("OnHide", LetGo)
 	Skin.Waiting(list.empty)
-	list.empty:SetText(L.LIST_EMPTY)
+	list.empty:SetText(EmptyWords())
 end
 
 local function Shown()
 	list.offset = 0
+	if not searching then list.empty:SetText(EmptyWords()) end
 	Gather()
 	-- Searched by itself the first time it is shown at this visit, and again for an item added since.
 	if not searching and (not searched or Unsearched()) then Search() end
@@ -200,7 +205,7 @@ local function Badge()
 end
 
 ns.AddPage("shopping", L.SHOPPING, Build, Shown, Closed, Badge, "gold")
-ns.PageHelp("shopping", L.HELP_SHOPPING)
+ns.PageHelp("shopping", L.HELP_SHOPPING, L.HELP_SHOPPING_PAD)
 
 -- The list changed (an item added or taken off): drawn again, the tab's count with it.
 function ns.RefreshShopping()

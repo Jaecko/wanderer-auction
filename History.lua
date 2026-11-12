@@ -113,7 +113,8 @@ local function Show(entry)
 		bar:SetHeight(height)
 		if value then
 			local gold = dayNumber == today
-			bar:SetColorTexture(gold and 1 or 0.62, gold and 0.82 or 0.58, gold and 0 or 0.5, gold and 0.9 or 0.7)
+			local c = Skin.COLORS[gold and "gold" or "muted"]
+			bar:SetColorTexture(c[1], c[2], c[3], gold and 0.9 or 0.7)
 		else
 			bar:SetColorTexture(1, 1, 1, 0.06)
 		end

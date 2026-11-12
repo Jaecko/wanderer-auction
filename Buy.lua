@@ -608,15 +608,16 @@ local function BuildRail(page)
 		row:SetPoint("RIGHT", frame, "RIGHT", -Skin.SCROLL_WIDTH, 0)
 		row.ground = row:CreateTexture(nil, "BACKGROUND")
 		row.ground:SetAllPoints()
-		row.ground:SetColorTexture(1, 0.82, 0, 0.07)
+		local gold = Skin.COLORS.gold
+		row.ground:SetColorTexture(gold[1], gold[2], gold[3], Skin.CHOSEN or 0.1)
 		row.mark = row:CreateTexture(nil, "ARTWORK")
 		row.mark:SetPoint("TOPLEFT")
 		row.mark:SetPoint("BOTTOMLEFT")
 		row.mark:SetWidth(2)
-		row.mark:SetColorTexture(1, 0.82, 0, 1)
+		row.mark:SetColorTexture(gold[1], gold[2], gold[3], 1)
 		local hover = row:CreateTexture(nil, "HIGHLIGHT")
 		hover:SetAllPoints()
-		hover:SetColorTexture(1, 1, 1, 0.05)
+		hover:SetColorTexture(1, 1, 1, Skin.HOVER or 0.05)
 		row.sign = Skin.Glyph(row, "chevron", 9)
 		row.text = Skin.Text(row, "GameTooltipText", "text")
 		if row.text.SetWordWrap then row.text:SetWordWrap(false) end
@@ -708,8 +709,9 @@ function DrawRecent()
 				box:SetText(self.search)
 				box:ClearFocus()
 				Browse(self.search)
-			end, L.RECENT_SEARCH_DESC, 20)
-			button:RegisterForClicks("LeftButtonUp", "RightButtonUp") button.padRight = true
+			end, function() return (U.UsingPad and U.UsingPad()) and L.RECENT_SEARCH_DESC_PAD or L.RECENT_SEARCH_DESC end, 20)
+			button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+			button.padRight, button.padRightWord = true, L.PAD_FORGET
 			recent[index] = button
 		end
 		if button then
@@ -744,7 +746,8 @@ local function Build(page)
 	box:SetHeight(32)
 	box:SetPoint("TOPLEFT", page, "TOPLEFT", left, 0)
 	-- Your favorites, quiet, beside the search (the row under it holds the filters, long in some languages).
-	buttons.favorites = Skin.SmallButton(page, L.FAVORITES, Favorites, L.FAVORITES_DESC, 32)
+	buttons.favorites = Skin.SmallButton(page, L.FAVORITES, Favorites,
+		function() return (U.UsingPad and U.UsingPad()) and L.FAVORITES_DESC_PAD or L.FAVORITES_DESC end, 32)
 	buttons.favorites:SetPoint("RIGHT", buttons.search, "LEFT", -8, 0)
 	box:SetPoint("RIGHT", buttons.favorites, "LEFT", -8, 0)
 	-- Under it: the levels, the rarities, usable only.
@@ -773,6 +776,7 @@ local function Build(page)
 	list = Skin.Table(page, {
 		nameTitle = L.COL_ITEM,
 		width = 780, rows = 26, onClick = Choose, onDraw = DrawResults, nameSort = "name",
+		padRight = true, padRightWord = L.PAD_CARD, -- (its right click: the item's card)
 		onSort = function(sort)
 			Saved().sort = sort
 			Browse(box:GetText())
@@ -880,7 +884,7 @@ local function Build(page)
 	cost:SetPoint("RIGHT", commodity, "RIGHT", 0, 0)
 	cost:SetHeight(118)
 	detail.total = Skin.SummaryLine(cost, nil, L.TOTAL_FOR:format(1), true)
-	detail.total.value:SetTextColor(0.9, 0.88, 0.82)
+	detail.total.value:SetTextColor(Skin.COLORS.text[1], Skin.COLORS.text[2], Skin.COLORS.text[3])
 	detail.average = Skin.SummaryLine(cost, detail.total, L.AVERAGE)
 	detail.top = Skin.SummaryLine(cost, detail.average, L.DEAREST)
 	local note = Skin.Text(cost, "GameTooltipTextSmall", "muted")
@@ -918,7 +922,7 @@ local function Build(page)
 		row.ground:SetColorTexture(1, 1, 1, 0.035)
 		row.chosen = row:CreateTexture(nil, "BACKGROUND", nil, 1)
 		row.chosen:SetAllPoints()
-		row.chosen:SetColorTexture(1, 0.82, 0, 0.1)
+		row.chosen:SetColorTexture(Skin.COLORS.gold[1], Skin.COLORS.gold[2], Skin.COLORS.gold[3], Skin.CHOSEN or 0.1)
 		row.buyout = Skin.Text(row, "GameTooltipText", "text")
 		row.buyout:SetPoint("LEFT", row, "LEFT", 8, 0)
 		row.bid = Skin.Text(row, "GameTooltipTextSmall", "soft")
@@ -942,6 +946,8 @@ local function Build(page)
 	bidCaps:SetPoint("BOTTOMLEFT", item, "BOTTOMLEFT", 0, 38)
 	detail.bidMoney = ns.PriceBox(item, { width = 170, height = 28, onChange = function() UpdateItem() end, tip = L.PRICE_FIELD_DESC })
 	detail.bidMoney:SetPoint("TOPLEFT", bidCaps, "BOTTOMLEFT", 0, -6)
+	-- (a controller: nothing typed, the cross steps your bid, never under the least the auction takes)
+	ns.PadSteps(detail.bidMoney, L.YOUR_BID, function() return auction and auction.minBid or 0 end, function() UpdateItem() end)
 	DrawRail()
 	DrawRecent()
 end
@@ -975,7 +981,7 @@ local function Closed()
 end
 
 ns.AddPage("buy", L.BUY, Build, Shown, Closed)
-ns.PageHelp("buy", L.HELP_BUY)
+ns.PageHelp("buy", L.HELP_BUY, L.HELP_BUY_PAD)
 
 -- From another addon (Wanderer Bags): this name searched at once (at the auction house, Wanderer's
 -- window in use; true when done).
@@ -1011,33 +1017,35 @@ end
 -- An item shift-clicked (in your bags, a link) while the Buy page is shown: searched at once, as the
 -- game's own window does, the search box chosen or not (once: the box may have taken it already).
 local insertedAt -- (when the box took a link itself)
-if hooksecurefunc and HandleModifiedItemClick then
-	hooksecurefunc("HandleModifiedItemClick", function(link)
-		if type(link) ~= "string" or not (IsShiftKeyDown and IsShiftKeyDown()) then return end
-		if not (ns.IsShown() and ns.CurrentPage() == "buy" and list and list:IsVisible()) then return end
-		if insertedAt == GetTime() then return end
-		if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() then return end -- (a link for the chat)
-		local name = U.LinkName(link)
-		if not name then return end
-		ns.SearchFor(name)
-		-- (the game opens its stack splitter on the same shift-click: put away, it was a search)
-		C_Timer.After(0, function()
-			if StackSplitFrame and StackSplitFrame:IsShown() then StackSplitFrame:Hide() end
+ns.AtStart(function()
+	if hooksecurefunc and HandleModifiedItemClick then
+		hooksecurefunc("HandleModifiedItemClick", function(link)
+			if type(link) ~= "string" or not (IsShiftKeyDown and IsShiftKeyDown()) then return end
+			if not (ns.IsShown() and ns.CurrentPage() == "buy" and list and list:IsVisible()) then return end
+			if insertedAt == GetTime() then return end
+			if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() then return end -- (a link for the chat)
+			local name = U.LinkName(link)
+			if not name then return end
+			ns.SearchFor(name)
+			-- (the game opens its stack splitter on the same shift-click: put away, it was a search)
+			C_Timer.After(0, function()
+				if StackSplitFrame and StackSplitFrame:IsShown() then StackSplitFrame:Hide() end
+			end)
 		end)
-	end)
-end
+	end
 
-if hooksecurefunc and ChatEdit_InsertLink then
-	hooksecurefunc("ChatEdit_InsertLink", function(link)
-		if not (box and box:HasFocus() and type(link) == "string") then return end
-		local name = U.LinkName(link)
-		if not name then return end
-		insertedAt = GetTime()
-		box:SetText(name)
-		box:ClearFocus()
-		Browse(name)
-	end)
-end
+	if hooksecurefunc and ChatEdit_InsertLink then
+		hooksecurefunc("ChatEdit_InsertLink", function(link)
+			if not (box and box:HasFocus() and type(link) == "string") then return end
+			local name = U.LinkName(link)
+			if not name then return end
+			insertedAt = GetTime()
+			box:SetText(name)
+			box:ClearFocus()
+			Browse(name)
+		end)
+	end
+end)
 
 -- Events --------------------------------------------------------------------------------------------------
 

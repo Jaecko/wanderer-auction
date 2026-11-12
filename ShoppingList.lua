@@ -84,6 +84,7 @@ local function Create()
 	intro:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	intro:SetJustifyH("LEFT")
 	intro:SetText(L.LIST_INTRO)
+	window.intro = intro
 	list = Skin.Table(window, {
 		nameTitle = L.COL_ITEM, width = WIDTH - margin * 2, rows = ROWS,
 		-- A click (left or right): its card beside its row (how many, always on you, your highest price, off it).
@@ -137,6 +138,9 @@ local function Create()
 	window:HookScript("OnHide", function() names:UnregisterEvent("GET_ITEM_INFO_RECEIVED") end)
 	window:HookScript("OnShow", function(self)
 		names:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+		local pad = U.UsingPad and U.UsingPad()
+		self.intro:SetText(pad and L.LIST_INTRO_PAD or L.LIST_INTRO)
+		list.empty:SetText(pad and L.LIST_EMPTY_PAD or L.LIST_EMPTY)
 		self.autoBuy:Refresh()
 		self.fromBank:Refresh()
 		self.cap:SetLabel(L.LIST_CAP:format(U.Coins(ns.BuyCap() * 10000)))
@@ -207,18 +211,18 @@ local function MerchantTab()
 end
 
 -- For the other addons (Wanderer Bags' heading): the window, how many items it still lacks.
-WandererAuction.ToggleList = function() ns.ToggleList() end
-WandererAuction.ShoppingLack = function() return ns.On() and ns.ShoppingLack() or 0 end -- (off: no count to show)
-WandererAuction.AskShopping = function(id, keep) if ns.TellOff() then Ask(tonumber(id), keep) end end
+ns.public.ToggleList = function() ns.ToggleList() end
+ns.public.ShoppingLack = function() return ns.On() and ns.ShoppingLack() or 0 end -- (off: no count to show)
+ns.public.AskShopping = function(id, keep) if ns.TellOff() then Ask(tonumber(id), keep) end end
 ns.AskShopping = Ask -- (a result's card, Buy.lua)
 
 -- Wanderer's key binding (the game's key options, "Wanderer Auction").
 BINDING_HEADER_WANDERERAUCTION = "Wanderer Auction"
 BINDING_NAME_WANDERERAUCTION_LIST = L.SHOPPING
 BINDING_NAME_WANDERERAUCTION_POST_NEXT = L.SELL_ALL_KEY
-function WandererAuction_ToggleList() ns.ToggleList() end
+function WandererAuction_ToggleList() if ns.started then ns.ToggleList() end end
 
-do
+ns.AtStart(function()
 	local events = CreateFrame("Frame")
 	pcall(events.RegisterEvent, events, "MERCHANT_SHOW")
 	pcall(events.RegisterEvent, events, "BAG_UPDATE_DELAYED")
@@ -236,14 +240,13 @@ do
 			Gather()
 		end
 	end)
-end
-
--- A Shift+click on an item (your bags, a link) while the list is shown (here, or its page at the auction
--- house): added, how many asked.
-if hooksecurefunc and ChatEdit_InsertLink then
-	hooksecurefunc("ChatEdit_InsertLink", function(link)
-		if not ns.On() or (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) then return end
-		local shown = (window and window:IsShown()) or ns.ShoppingPageShown()
-		if shown then Ask(U.ItemID(link)) end
-	end)
-end
+	-- A Shift+click on an item (your bags, a link) while the list is shown (here, or its page at the auction
+	-- house): added, how many asked.
+	if hooksecurefunc and ChatEdit_InsertLink then
+		hooksecurefunc("ChatEdit_InsertLink", function(link)
+			if not ns.On() or (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) then return end
+			local shown = (window and window:IsShown()) or ns.ShoppingPageShown()
+			if shown then Ask(U.ItemID(link)) end
+		end)
+	end
+end)
