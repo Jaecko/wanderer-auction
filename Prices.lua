@@ -168,127 +168,6 @@ function ns.Market(id, beforeToday)
 	return weight > 0 and math.floor(sum / weight + 0.5) or nil
 end
 
--- An item's days, oldest first: { day, value, looks, cheapest } (a copy to read, never to change).
-function ns.Days(id)
-	local seen = DB().prices[tonumber(id) or -1]
-	local copy, today = {}, math.floor(time() / DAY)
-	for _, day in ipairs(seen and seen.days or {}) do
-		if today - day[1] < DAYS_KEPT then copy[#copy + 1] = { day[1], day[2], day[3], day[4] } end
-	end
-	return copy
-end
-
--- Whether to sell now, as TradeSkillMaster's sellers judge it: today's value against the days before.
--- Returns "few" (fewer than 2 days with a value), "merchant" (a merchant gives as much once the cut taken),
--- "good" (10 % or more above), "wait" (15 % or more below), or "usual"; and today's value against the days
--- before (1.12: 12 % above).
-ns.SELL_NOW, ns.WAIT_UNDER = 1.10, 0.85
-function ns.Advice(id, vendor)
-	local days, valued = ns.Days(id), 0
-	for _, day in ipairs(days) do if day[2] then valued = valued + 1 end end
-	local today = days[#days]
-	local now = today and today[1] == math.floor(time() / DAY) and today[2] or nil
-	local before = ns.Market(id, true)
-	if vendor and vendor > 0 and (now or before) and ns.Net(now or before) <= vendor then return "merchant" end
-	if valued < 2 or not (now and before) then return "few" end
-	local ratio = now / before
-	if ratio >= ns.SELL_NOW then return "good", ratio end
-	if ratio <= ns.WAIT_UNDER then return "wait", ratio end
-	return "usual", ratio
-end
-
--- The optimized price: the reference is the market's value now and over the last days (their mean when
--- both are known); what is offered under 80 % of it is left out (a bait: sold low to be bought and sold
--- again dearer, it says nothing of the market); one copper under the first offer left (then down to the
--- whole silver where it is posted), never under the
--- floor (a merchant's) nor 80 % of the reference, never over twice the reference (the reference itself
--- when nothing credible is for sale). Returns the price, how many offers were left out, the reference
--- and the cheapest credible offer (nil without any reference).
-ns.TRUSTED_SHARE, ns.HIGHEST_SHARE = 0.8, 2
-function ns.Optimize(listings, history, floor)
-	local now = ns.MarketValue(listings)
-	local reference = now and history and (now + history) / 2 or now or history
-	if not reference then return nil end
-	reference = math.floor(reference + 0.5)
-	local trusted = math.floor(reference * ns.TRUSTED_SHARE)
-	local low = math.max(1, floor or 0, trusted)
-	local high = math.max(low, math.floor(reference * ns.HIGHEST_SHARE))
-	local left = 0 -- (the bait: under 80 % of the reference; under the floor only, it is no bait)
-	for _, offer in ipairs(listings) do
-		if offer[1] >= low then
-			if offer[1] > high then break end
-			return math.max(low, offer[1] - 1), left, reference, offer[1]
-		end
-		if offer[1] < trusted then left = left + 1 end
-	end
-	return math.min(high, math.max(low, math.floor(reference + 0.5))), left, reference, nil
-end
-
--- A young market: fewer than 3 offers now and no day of its own before today. The optimized price says
--- nothing credible then: your own price is asked.
-ns.YOUNG_OFFERS = 3
-function ns.Young(listings, history)
-	return #(listings or {}) < ns.YOUNG_OFFERS and not history
-end
-
--- How many days an item's market value was seen on (the last 14).
-function ns.ValuedDays(id)
-	local valued = 0
-	for _, day in ipairs(ns.Days(id)) do if day[2] then valued = valued + 1 end end
-	return valued
-end
-
--- The market's value sure enough to make an item junk: from 3 offers or more seen now (with its days), else
--- from 2 days or more; nil on less (nothing judged then). opt: what the optimized price found now.
-ns.SURE_DAYS = 2
-function ns.SureValue(id, opt)
-	if opt and opt.reference and (opt.offers or 0) >= ns.YOUNG_OFFERS then return opt.reference end
-	if ns.ValuedDays(id) >= ns.SURE_DAYS then return ns.Market(id) end
-	return nil
-end
-
--- The items the server refuses to post (some of Forever's, with stats of their own: "of the owl"), kept
--- for every character; forgotten as soon as one is posted after all. One refusal may be passing (the
--- server busy): an item counts as refused at its second.
-ns.REFUSALS = 2
-function ns.Refused(id)
-	local refused = DB().refused
-	return refused and refused[tonumber(id) or -1] ~= nil or false
-end
--- A refusal counted (on: false, all of them forgotten). True once the item counts as refused.
-function ns.Refuse(id, on)
-	local saved = DB()
-	id = tonumber(id) or -1
-	saved.refused = saved.refused or {}
-	saved.strikes = type(saved.strikes) == "table" and saved.strikes or {}
-	if on == false then
-		saved.refused[id], saved.strikes[id] = nil, nil
-		return false
-	end
-	local strikes = (tonumber(saved.strikes[id]) or 0) + 1
-	if strikes >= ns.REFUSALS then
-		saved.refused[id], saved.strikes[id] = time(), nil
-		return true
-	end
-	saved.strikes[id] = strikes
-	return ns.Refused(id)
-end
-
--- Your price for an item, kept as the prices are (the account, the realm's market): the least ever offered
--- for it, set from its price box. ns.SetYourPrice(id, nil) forgets it.
-function ns.YourPrice(id)
-	local yours = DB().yours
-	local price = type(yours) == "table" and tonumber(yours[tonumber(id) or -1]) or nil
-	return price and price > 0 and price or nil
-end
-function ns.SetYourPrice(id, copper)
-	id, copper = tonumber(id), tonumber(copper)
-	if not id then return end
-	local saved = DB()
-	saved.yours = type(saved.yours) == "table" and saved.yours or {}
-	saved.yours[id] = copper and copper > 0 and math.floor(copper) or nil
-end
-
 -- A price far from an item's usual value (the market's days): "low" under half of it, "high" over 3 times;
 -- with the usual value. Nil when it looks usual, or no usual value is known.
 ns.ODD_LOW, ns.ODD_HIGH = 0.5, 3
@@ -446,12 +325,15 @@ local function Mine()
 		-- (the old shared list, a month long after the first character took it: one made later starts clean)
 		local now = time()
 		saved.sharedUntil = saved.sharedUntil or now + 30 * 86400
-		local old = now <= saved.sharedUntil and saved.shopping or nil
+		local sharing = now <= saved.sharedUntil
+		local old = sharing and saved.shopping or nil
 		for id, entry in pairs(type(old) == "table" and old or {}) do
 			if type(entry) == "table" then list[id] = U.Copy(entry) end
 		end
+		-- (the old shared buying on arrival, only within that month too: a character made later never buys by
+		-- itself before you switch it on for it)
 		local settings = ns.Settings() or {}
-		mine = { shopping = list, autoBuy = settings.autoBuy and true or false, buyCap = tonumber(settings.buyCap) or 5 }
+		mine = { shopping = list, autoBuy = sharing and settings.autoBuy and true or false, buyCap = tonumber(settings.buyCap) or 5 }
 		-- (the character not known yet, at the very start: a passing copy, nothing kept)
 		if who then saved.characters[who] = mine end
 	end

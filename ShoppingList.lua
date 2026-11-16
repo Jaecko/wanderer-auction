@@ -76,6 +76,7 @@ end
 
 local function Create()
 	window = Skin.CreateWindow("WandererAuctionShoppingList", "MEDIUM")
+	Skin.Sounds(window, Skin.SOUNDS.open, Skin.SOUNDS.close)
 	Skin.Dress(window, { "CENTER", UIParent, "CENTER", 260, 60 }, "auctionShoppingPos")
 	window:SetSize(WIDTH, HEIGHT)
 	local _, title, margin = Skin.Header(window, "Wanderer", L.SHOPPING, { settings = "ext:auction" })
@@ -246,7 +247,12 @@ ns.AtStart(function()
 		hooksecurefunc("ChatEdit_InsertLink", function(link)
 			if not ns.On() or (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) then return end
 			local shown = (window and window:IsShown()) or ns.ShoppingPageShown()
-			if shown then Ask(U.ItemID(link)) end
+			if not shown then return end
+			Ask(U.ItemID(link))
+			-- (the game opens its stack splitter on the same shift-click: put away, it was for the list)
+			C_Timer.After(0, function()
+				if StackSplitFrame and StackSplitFrame:IsShown() then StackSplitFrame:Hide() end
+			end)
 		end)
 	end
 end)

@@ -22,6 +22,7 @@ local Safe, Clean = U and U.Safe, U and U.Clean
 local AH = ns.AH
 
 local AUCTION_ROWS = 7
+local QTY_WIDTH = 40 -- an item's auctions: the count's column, before the buyout's
 local QUANTITIES = { 1, 5, 20, 100 }
 local RAIL_WIDTH, RAIL_ROW, RAIL_ROWS = 180, 22, 40
 local USUAL_GOOD, USUAL_DEAR = 0.9, 1.25 -- a price under 90 % of its usual one: good; over 125 %: dear
@@ -267,7 +268,11 @@ local function DrawResults()
 			local usual = ns.Market(entry.id)
 			local price = entry.minPrice and U.Coins(entry.minPrice) or ""
 			local tone = usual and entry.minPrice and (entry.minPrice <= usual * USUAL_GOOD and "good" or entry.minPrice >= usual * USUAL_DEAR and "bad")
-			if tone then price = Skin.Colorize(price, tone) end
+			-- (the coins keep their own colors: the gap said in front, in green or red, -25 % or +40 %)
+			if tone then
+				local gap = math.floor((entry.minPrice / usual - 1) * 100 + 0.5)
+				price = Skin.Colorize(("%+d %%"):format(gap), tone) .. "  " .. price
+			end
 			values = {
 				level = entry.level and entry.level > 1 and tostring(entry.level) or "",
 				total = tostring(entry.total or ""),
@@ -393,6 +398,25 @@ end
 
 -- An item: its auctions ------------------------------------------------------------------------------
 
+-- An auction's bid in words: yours when you are the highest bidder, else someone's current one, else the least
+-- to offer; nil without a bid at all. With its color's role.
+local function BidWords(entry)
+	if not ((entry.bid and entry.bid > 0) or entry.minBid) then return nil end
+	if entry.highest then return L.BID_YOURS, "good" end
+	if entry.bid and entry.bid > 0 then return L.BID_CURRENT, "muted" end
+	return L.BID_MINIMUM, "muted"
+end
+ns.BuyBidWords = BidWords -- (tests)
+
+-- You, the highest bidder on an auction (the game names its bidder).
+local function HighestBidder(result)
+	local bidder = Clean(result.bidder)
+	if not bidder then return false end
+	local me = Clean(Safe(UnitGUID, "player"))
+	return me ~= nil and bidder == me
+end
+ns.BuyHighestBidder = HighestBidder -- (tests)
+
 local function DrawAuctions()
 	auctionOffset = math.max(0, math.min(auctionOffset, #auctions - AUCTION_ROWS))
 	if chosen and auctions[1] and auctionOffset + AUCTION_ROWS >= #auctions and not chosen.askedMore
@@ -406,8 +430,30 @@ local function DrawAuctions()
 		row:SetShown(entry ~= nil)
 		if entry then
 			row.chosen:SetShown(entry == auction)
+			local quantity = math.max(1, entry.quantity or 1)
+			row.qty:SetText(tostring(quantity))
+			-- (several in one auction: the price each under the buyout; one alone: the buyout in the middle)
+			local each = entry.buyout and quantity > 1 and L.QUEUE_EACH:format(U.Coins(math.floor(entry.buyout / quantity)))
 			row.buyout:SetText(entry.buyout and U.Coins(entry.buyout) or Skin.Colorize(L.NO_BUYOUT, "muted"))
-			row.bid:SetText(entry.minBid and U.Coins(entry.bid or entry.minBid) or "")
+			row.buyout:ClearAllPoints()
+			if each then
+				row.buyout:SetPoint("TOPLEFT", row, "TOPLEFT", 8 + QTY_WIDTH, -1)
+			else
+				row.buyout:SetPoint("LEFT", row, "LEFT", 8 + QTY_WIDTH, 0)
+			end
+			row.each:SetText(each or "")
+			-- The bid: someone's (the current one, yours when you are the highest), else the least to offer.
+			local word, tone = BidWords(entry)
+			local shown = entry.bid and entry.bid > 0 and entry.bid or entry.minBid
+			row.bid:SetText(shown and U.Coins(shown) or "")
+			row.bid:ClearAllPoints()
+			if word then
+				row.bid:SetPoint("TOPLEFT", row, "TOPLEFT", 8 + QTY_WIDTH + 160, -2)
+			else
+				row.bid:SetPoint("LEFT", row, "LEFT", 8 + QTY_WIDTH + 160, 0)
+			end
+			row.bidWhat:SetText(word or "")
+			row.bidWhat:SetTextColor(Skin.RGB(tone or "muted"))
 			row.time:SetText((entry.mine and (Skin.Colorize(L.YOURS, "gold") .. "  ") or "") .. ns.TimeLeft(entry.timeLeft))
 		end
 	end
@@ -438,7 +484,7 @@ local function ShowItem()
 			auctions[#auctions + 1] = { id = Clean(result.auctionID), buyout = Clean(result.buyoutAmount),
 				bid = Clean(result.bidAmount), minBid = Clean(result.minBid), quantity = Clean(result.quantity) or 1,
 				timeLeft = Clean(result.timeLeft), mine = Clean(result.containsOwnerItem) and true or false,
-				link = Clean(result.itemLink) }
+				link = Clean(result.itemLink), highest = HighestBidder(result) }
 		end
 	end
 	local cheapest = auctions[1] and auctions[1].buyout
@@ -644,12 +690,16 @@ local function BuildRail(page)
 	end
 end
 
--- The rarities shown and usable only, at the top: each a word in its rarity's color, lit when on.
+-- The rarities shown and usable only, at the top: each a word in its rarity's color, lit when on; off, in the
+-- muted words (still read, to switch it back on).
 local function PaintQuality(toggle)
 	local on = Filters()[toggle.filter] and true or false
-	local r, g, b = U.QualityColor(toggle.quality)
-	toggle.caption:SetTextColor(r, g, b)
-	toggle.caption:SetAlpha(on and 1 or 0.45)
+	if on then
+		toggle.caption:SetTextColor(U.QualityColor(toggle.quality))
+	else
+		toggle.caption:SetTextColor(Skin.RGB("muted"))
+	end
+	toggle.caption:SetAlpha(1)
 	toggle.ground:SetColorTexture(1, 1, 1, on and 0.08 or 0.02)
 end
 
@@ -770,6 +820,7 @@ local function Build(page)
 			self:ClearFocus()
 			Browse(box:GetText())
 		end)
+		levelBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	end
 	BuildFilters(page, detail.maxLevel)
 	-- The results: sorted by a click on a column's title.
@@ -879,6 +930,7 @@ local function Build(page)
 		end
 	end)
 	detail.amount:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+	detail.amount:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	local cost = Skin.Panel(commodity)
 	cost:SetPoint("TOPLEFT", detail.amounts, "BOTTOMLEFT", 0, -16)
 	cost:SetPoint("RIGHT", commodity, "RIGHT", 0, 0)
@@ -905,12 +957,13 @@ local function Build(page)
 	local itsAuctions = Skin.Caps(item, L.ITS_AUCTIONS)
 	itsAuctions:SetPoint("TOPLEFT")
 	local heads = {}
-	for index, text in ipairs({ L.COL_BUYOUT, L.COL_BID, L.COL_TIME }) do
+	for index, text in ipairs({ L.COL_QTY, L.COL_BUYOUT, L.COL_BID, L.COL_TIME }) do
 		heads[index] = Skin.Caps(item, text)
 	end
 	heads[1]:SetPoint("TOPLEFT", itsAuctions, "BOTTOMLEFT", 8, -10)
-	heads[2]:SetPoint("LEFT", heads[1], "LEFT", 170, 0)
-	heads[3]:SetPoint("TOPRIGHT", item, "TOPRIGHT", -8 - Skin.SCROLL_WIDTH, -24)
+	heads[2]:SetPoint("LEFT", heads[1], "LEFT", QTY_WIDTH, 0)
+	heads[3]:SetPoint("LEFT", heads[2], "LEFT", 160, 0)
+	heads[4]:SetPoint("TOPRIGHT", item, "TOPRIGHT", -8 - Skin.SCROLL_WIDTH, -24)
 	detail.auctionRows = {}
 	for index = 1, AUCTION_ROWS do
 		local row = CreateFrame("Button", nil, item)
@@ -923,10 +976,15 @@ local function Build(page)
 		row.chosen = row:CreateTexture(nil, "BACKGROUND", nil, 1)
 		row.chosen:SetAllPoints()
 		row.chosen:SetColorTexture(Skin.COLORS.gold[1], Skin.COLORS.gold[2], Skin.COLORS.gold[3], Skin.CHOSEN or 0.1)
+		-- (how many; the buyout, the price each under it; the bid, which one under it)
+		row.qty = Skin.Text(row, "GameTooltipText", "text")
+		row.qty:SetPoint("LEFT", row, "LEFT", 8, 0)
 		row.buyout = Skin.Text(row, "GameTooltipText", "text")
-		row.buyout:SetPoint("LEFT", row, "LEFT", 8, 0)
+		row.each = Skin.Text(row, "GameTooltipTextSmall", "muted")
+		row.each:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 8 + QTY_WIDTH, 2)
 		row.bid = Skin.Text(row, "GameTooltipTextSmall", "soft")
-		row.bid:SetPoint("LEFT", row, "LEFT", 178, 0)
+		row.bidWhat = Skin.Text(row, "GameTooltipTextSmall", "muted")
+		row.bidWhat:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 8 + QTY_WIDTH + 160, 2)
 		row.time = Skin.Text(row, "GameTooltipTextSmall", "muted")
 		row.time:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 		row:SetScript("OnClick", function(self) if self.entry then ChooseAuction(self.entry) end end)
@@ -1014,37 +1072,43 @@ function ns.BuyItem(id, name)
 	Choose(entry)
 end
 
--- An item shift-clicked (in your bags, a link) while the Buy page is shown: searched at once, as the
--- game's own window does, the search box chosen or not (once: the box may have taken it already).
-local insertedAt -- (when the box took a link itself)
+-- An item shift-clicked (in your bags, a link) while Wanderer's window is shown: its name searched at once on the
+-- Buy page, as the game's own window does, the search box chosen or not. Heard where the game passes the link on
+-- (its modified click, then its insertion of a link: whichever this client calls), once per click; a link for the
+-- chat, while you write there, stays the chat's.
+local searchedAt, searchedName
+local function Writing()
+	if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() ~= nil then return true end
+	-- (another line to write in has the keyboard: a whisper's answer, a note)
+	local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+	return focus ~= nil and focus ~= box
+end
+local function ShiftSearch(link, fromBox)
+	if type(link) ~= "string" or U.IsSecret(link) or not link:find("item:", 1, true) then return end
+	if not (ns.IsShown() and ns.AtAuction()) then return end
+	if not fromBox and (Writing() or not (IsShiftKeyDown and IsShiftKeyDown())) then return end
+	local name = U.LinkName(link)
+	if not name then return end
+	if searchedAt == GetTime() and searchedName == name then return end
+	searchedAt, searchedName = GetTime(), name
+	ns.SearchFor(name)
+	-- (the game opens its stack splitter on the same shift-click: put away, it was a search)
+	C_Timer.After(0, function()
+		if StackSplitFrame and StackSplitFrame:IsShown() then StackSplitFrame:Hide() end
+	end)
+end
+ns.ShiftSearch = ShiftSearch -- (tests)
 ns.AtStart(function()
-	if hooksecurefunc and HandleModifiedItemClick then
-		hooksecurefunc("HandleModifiedItemClick", function(link)
-			if type(link) ~= "string" or not (IsShiftKeyDown and IsShiftKeyDown()) then return end
-			if not (ns.IsShown() and ns.CurrentPage() == "buy" and list and list:IsVisible()) then return end
-			if insertedAt == GetTime() then return end
-			if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() then return end -- (a link for the chat)
-			local name = U.LinkName(link)
-			if not name then return end
-			ns.SearchFor(name)
-			-- (the game opens its stack splitter on the same shift-click: put away, it was a search)
-			C_Timer.After(0, function()
-				if StackSplitFrame and StackSplitFrame:IsShown() then StackSplitFrame:Hide() end
-			end)
-		end)
+	if not hooksecurefunc then return end
+	if HandleModifiedItemClick then hooksecurefunc("HandleModifiedItemClick", function(link) ShiftSearch(link) end) end
+	local function Inserted(link)
+		-- (our own search box chosen: the link is its words)
+		if box and box:HasFocus() then return ShiftSearch(link, true) end
+		ShiftSearch(link)
 	end
-
-	if hooksecurefunc and ChatEdit_InsertLink then
-		hooksecurefunc("ChatEdit_InsertLink", function(link)
-			if not (box and box:HasFocus() and type(link) == "string") then return end
-			local name = U.LinkName(link)
-			if not name then return end
-			insertedAt = GetTime()
-			box:SetText(name)
-			box:ClearFocus()
-			Browse(name)
-		end)
-	end
+	if ChatEdit_InsertLink then hooksecurefunc("ChatEdit_InsertLink", Inserted) end
+	local util = rawget(_G, "ChatFrameUtil")
+	if type(util) == "table" and type(util.InsertLink) == "function" then hooksecurefunc(util, "InsertLink", Inserted) end
 end)
 
 -- Events --------------------------------------------------------------------------------------------------

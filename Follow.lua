@@ -138,6 +138,8 @@ function UpdateTakeBack()
 	for _, item in ipairs(items) do cost = cost + item.cost end
 	card.summary:SetText(L.TAKE_BACK_SUMMARY:format(#items, U.Coins(cost)))
 	local first, total = items[1], takeBack.done + #items
+	-- (the one shown is the one a click cancels: never another, its cost unsaid, should the list change meanwhile)
+	takeBack.shown = first and first.entry.auctionID or nil
 	card.next:SetShown(first ~= nil)
 	card.skip:SetEnabled(first ~= nil)
 	card.progress:SetText(total > 0 and L.QUEUE_DONE:format(takeBack.done, total) or "")
@@ -165,6 +167,7 @@ local function CancelNext()
 	if not Ready() then return UpdateTakeBack() end
 	local item = TakeBackItems()[1]
 	if not item then return end
+	if item.entry.auctionID ~= takeBack.shown then return UpdateTakeBack() end
 	canceling, takeBack.at = item.entry.link or item.entry.name, GetTime()
 	takeBack.auction = item.entry.auctionID
 	Safe(AH.CancelAuction, item.entry.auctionID)
@@ -281,6 +284,20 @@ local function State(entry)
 	return L.CHIP_NOT_TODAY, "grey", cancel, function() Cancel(entry) end
 end
 
+-- A row's kind and price: your bid; your sale's buyout, or its current bid once someone has bid (said in its
+-- kind), or its starting bid when it has no buyout; never blank.
+local function RowPrice(entry)
+	if entry.bid then
+		return L.KIND_BID, entry.bidAmount and U.Coins(entry.bidAmount) or ""
+	end
+	local bidden = not entry.sold and (entry.bidder ~= nil or (entry.bidAmount or 0) > 0)
+	if bidden and entry.bidAmount and entry.bidAmount > 0 then return L.KIND_SALE_BID, U.Coins(entry.bidAmount) end
+	if entry.buyout then return L.KIND_SALE, U.Coins(entry.buyout) end
+	if entry.bidAmount and entry.bidAmount > 0 then return L.KIND_SALE, U.Coins(entry.bidAmount) end
+	return L.KIND_SALE, Skin.Colorize(L.NO_BUYOUT, "muted")
+end
+ns.FollowRowPrice = RowPrice -- (tests)
+
 function Draw()
 	if not (list and list:IsVisible()) then return end
 	local offset = list:Clamp(#rows)
@@ -288,11 +305,11 @@ function Draw()
 		local entry = rows[index + offset]
 		local values, chip, tone, action, run
 		if entry then
-			local price = entry.bid and entry.bidAmount or entry.buyout
+			local kind, price = RowPrice(entry)
 			values = {
-				kind = entry.bid and L.KIND_BID or L.KIND_SALE,
+				kind = kind,
 				qty = tostring(entry.quantity or 1),
-				price = price and U.Coins(price) or "",
+				price = price,
 				left = entry.sold and "" or ns.TimeLeft(entry.timeLeft),
 			}
 			chip, tone, action, run = State(entry)
@@ -348,7 +365,7 @@ local function ReadOwned()
 		if id then
 			local entry = { auctionID = Clean(info.auctionID), key = key, id = id, link = Clean(info.itemLink), name = "",
 				quality = 1, quantity = Clean(info.quantity) or 1, buyout = Clean(info.buyoutAmount), bidAmount = Clean(info.bidAmount),
-				timeLeft = Clean(info.timeLeft), sold = Clean(info.status) == SOLD }
+				bidder = Clean(info.bidder), timeLeft = Clean(info.timeLeft), sold = Clean(info.status) == SOLD }
 			ns.Describe(entry)
 			sales[#sales + 1] = entry
 		end

@@ -1,8 +1,8 @@
 local ADDON, ns = ...
 local L = ns.L
 
--- The auction house, in Wanderer's window: five tabs (to sell, to buy, what
--- you follow, the prices' history, your shopping list), each a table on the
+-- The auction house, in Wanderer's window: four tabs (to sell, to buy, your
+-- auctions and bids, your shopping list), each a table on the
 -- left and what is chosen on the right, one main button per page, a "Help"
 -- word per page at the end of the tabs, keys while the pointer is over the
 -- window (the page says which, its buttons show them). It opens and closes with the
@@ -51,6 +51,13 @@ function ns.Replace()
 	return settings.replace and true or false
 end
 
+-- The window you switch to by its link: kept for the next visits (as the option would).
+local function Choose(replace)
+	local settings = ns.Settings()
+	if not settings then return end
+	settings.replace, settings.replaceChosen = replace and true or false, true
+end
+
 -- A page: its name, its tab's label, how it is built (once), what it does when shown and closed, and a
 -- count beside its tab (what waits for you there; nil: none) and that count's tone (red by default).
 function ns.AddPage(name, label, build, onShow, onClose, badge, badgeTone)
@@ -76,7 +83,6 @@ function ns.DurationName(index)
 end
 
 function ns.IsShown() return window and window:IsShown() or false end
-function ns.MainWindow() return window end
 function ns.CurrentPage() return current end
 function ns.AtAuction() return atAuction end
 
@@ -91,6 +97,8 @@ function ns.RefreshTabs()
 end
 
 function ns.ShowPage(name)
+	-- (a page that is no more, asked by an older call: the first one)
+	if not pages[name] then name = order[1] end
 	current = name
 	if not window then return end
 	for key, page in pairs(pages) do
@@ -149,7 +157,9 @@ end
 
 function Create()
 	window = W.Skin.CreateWindow("WandererAuctionWindow", "MEDIUM") -- (not "WandererAuction": the prices shared with the other addons)
-	W.Skin.Sounds(window, W.Skin.SOUNDS.open, W.Skin.SOUNDS.close)
+	-- No sound of its own: it opens and closes with the auction house, whose own window (kept shown, aside)
+	-- already plays the game's auction sounds; its cross plays none either.
+	window.wandererSounds = true
 	W.Skin.Dress(window, { "TOPLEFT", UIParent, "TOPLEFT", 24, -110 }, "auctionPos")
 	local saved = ns.Settings() and ns.Settings().size
 	window:SetSize(Skin.Within(saved and saved[1] or ns.WIDTH, MIN_WIDTH, MAX_WIDTH), Skin.Within(saved and saved[2] or ns.HEIGHT, MIN_HEIGHT, MAX_HEIGHT))
@@ -157,6 +167,7 @@ function Create()
 	-- Your money, and the game's own window, on the right (the page's "?", the cog and the cross after them).
 	local game = W.Skin.SmallButton(window, L.GAME_WINDOW, function()
 		Skin.Play("click")
+		Choose(false)
 		ns.UseGame()
 	end, L.GAME_WINDOW_DESC)
 	game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 54), -margin + 2)
@@ -249,22 +260,30 @@ function ns.OnKey(self, key)
 	if self.SetPropagateKeyboardInput then pcall(self.SetPropagateKeyboardInput, self, not take) end
 end
 
--- A key's word inside a button, at its right (the gesture that also does it).
-function ns.KeyLabel(button, word)
-	local label = Skin.Text(button, "GameTooltipTextSmall", "text")
+-- A key's word inside a button, at its right (the gesture that also does it). main: the gold button (its words'
+-- color, a little softer).
+function ns.KeyLabel(button, word, main)
+	local label = Skin.Text(button, "GameTooltipTextSmall", main and "onGold" or "text")
 	label:SetPoint("RIGHT", button, "RIGHT", -12, 0)
-	label:SetAlpha(0.6)
+	label:SetAlpha(main and 0.8 or 0.6)
 	label:SetText(word or "")
 	button.keyLabel = label
 	return label
 end
 
 -- A price to type ---------------------------------------------------------------------------------------------
--- One box for an amount: shown with its coins, typed as you like ("1.5" is 1g 50s; "1g50s", "75s", "30c" too,
+-- With a Wanderer of API 23: the kit's three boxes, gold, silver, copper (digits only, nothing else to type).
+-- Before: one box for an amount: shown with its coins, typed as you like ("1.5" is 1g 50s; "1g50s", "75s", "30c" too,
 -- see ns.ParseMoney); Enter keeps it, Escape gives the last one back. opts { width, height, big (the large
 -- font), onChange(copper) (typed only), tip }. box:Set(copper) (never calls onChange), box:Get(), box.input.
 function ns.PriceBox(parent, opts)
 	opts = opts or {}
+	if (W.API or 1) >= 23 and Skin.Money then
+		local box = Skin.Money(parent, function(copper, typed)
+			if typed and opts.onChange then opts.onChange(copper) end
+		end, { width = opts.width, height = opts.height, big = opts.big, tip = opts.tip })
+		return box
+	end
 	local box = CreateFrame("Frame", nil, parent)
 	box:SetSize(opts.width or 160, opts.height or 28)
 	box.value = 0
@@ -381,7 +400,10 @@ end
 -- The link beside the game's window, back to Wanderer's.
 local function Reopen()
 	if reopen or not _G.AuctionHouseFrame then return end
-	reopen = W.Skin.SmallButton(UIParent, L.TITLE, function() ns.UseWanderer() end)
+	reopen = W.Skin.SmallButton(UIParent, L.TITLE, function()
+		Choose(true)
+		ns.UseWanderer()
+	end)
 	reopen:SetFrameStrata("HIGH")
 	reopen:SetPoint("TOPLEFT", _G.AuctionHouseFrame, "TOPRIGHT", 6, -4)
 	reopen:Hide()
@@ -493,7 +515,7 @@ function ns.Init()
 		title = L.TITLE,
 		news = L.NEWS_LINES,
 		-- (autoBuy, buyCap: each character's now, kept with its list; read once as its start)
-		defaults = { enabled = true, replace = true, replaceChosen = false, duration = "2", sellWay = "optimized", tooltip = true,
+		defaults = { enabled = true, replace = true, replaceChosen = false, duration = "2", tooltip = true,
 			autoBuy = false, buyCap = 5, toMerchant = true },
 		-- Wanderer's menu: the shopping list, anywhere.
 		launcher = { label = L.SHOPPING, open = function() ns.ToggleList() end },
@@ -518,11 +540,6 @@ function ns.Init()
 				{ { "1", ns.DurationName(1) }, { "2", ns.DurationName(2) }, { "3", ns.DurationName(3) } },
 				function() return ns.Settings() and ns.Settings().duration or "2" end,
 				function(value) if ns.Settings() then ns.Settings().duration = value end end), enabled, on)
-			-- The price offered to sell (each item's own price is still yours to change on the Sell page).
-			o.Under(o.Dropdown("AUCTION_SELL_WAY", L.SELL_WAY, L.SELL_WAY_DESC, "optimized",
-				{ { "optimized", L.MODE_OPTIMIZED }, { "fast", L.MODE_FAST }, { "market", L.MODE_MARKET } },
-				function() return ns.Settings() and ns.Settings().sellWay or "optimized" end,
-				function(value) if ns.Settings() then ns.Settings().sellWay = value end end), enabled, on)
 
 			-- Over items, anywhere: the auction price in the tooltips.
 			o.Header(L.SECTION_OVER_ITEMS)
