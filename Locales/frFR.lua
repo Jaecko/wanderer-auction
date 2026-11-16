@@ -272,4 +272,5 @@ ns.LOCALES.frFR = {
 		BID_MINIMUM = "Enchère minimum",
 		BID_YOURS = "La vôtre, la plus haute",
 		KIND_SALE_BID = "Votre vente, avec enchère",
+		AUTOBUY_CAP = "Dépense maximale par visite",
 }

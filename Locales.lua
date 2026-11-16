@@ -275,6 +275,7 @@ local LOCALES = {
 		BID_MINIMUM = "Minimum bid",
 		BID_YOURS = "Yours, the highest",
 		KIND_SALE_BID = "Your sale, bid on",
+		AUTOBUY_CAP = "Most spent per visit",
 	},
 }
 -- The client's language comes in its own file, loaded after this one (Locales/<code>.lua).

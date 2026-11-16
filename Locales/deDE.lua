@@ -272,4 +272,5 @@ ns.LOCALES.deDE = {
 		BID_MINIMUM = "Mindestgebot",
 		BID_YOURS = "Deins, das höchste",
 		KIND_SALE_BID = "Dein Verkauf, mit Gebot",
+		AUTOBUY_CAP = "Höchstausgabe pro Besuch",
 }

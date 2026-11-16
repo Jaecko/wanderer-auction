@@ -272,4 +272,5 @@ ns.LOCALES.ptBR = {
 		BID_MINIMUM = "Lance mínimo",
 		BID_YOURS = "O seu, o mais alto",
 		KIND_SALE_BID = "Sua venda, com lance",
+		AUTOBUY_CAP = "Gasto máximo por visita",
 }

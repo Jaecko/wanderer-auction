@@ -272,4 +272,5 @@ ns.LOCALES.esES = {
 		BID_MINIMUM = "Puja mínima",
 		BID_YOURS = "La tuya, la más alta",
 		KIND_SALE_BID = "Tu venta, con puja",
+		AUTOBUY_CAP = "Gasto máximo por visita",
 }

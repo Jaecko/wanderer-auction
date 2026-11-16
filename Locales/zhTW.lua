@@ -272,4 +272,5 @@ ns.LOCALES.zhTW = {
 		BID_MINIMUM = "最低出價",
 		BID_YOURS = "你的出價，最高",
 		KIND_SALE_BID = "你的拍賣，已有出價",
+		AUTOBUY_CAP = "每次光顧的最高花費",
 }

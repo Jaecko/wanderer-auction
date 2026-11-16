@@ -552,6 +552,14 @@ function ns.Init()
 			-- the shopping list's window).
 			o.Under(o.Toggle("AUCTION_AUTOBUY", L.AUTOBUY .. " " .. L.THIS_CHARACTER, L.AUTOBUY_DESC, false, function() return ns.AutoBuy() end,
 				function(value) ns.AutoBuy(value) end), enabled, on)
+			-- (its cap, the shopping list's own setting: here too, a click asks the new one)
+			o.Under(o.Button(L.AUTOBUY_CAP, function() return U.Coins(ns.BuyCap() * 10000) end, L.LIST_CAP_DESC, function()
+				Skin.AskText(L.LIST_CAP_ASK, tostring(ns.BuyCap()), function(text)
+					local gold = tonumber(text)
+					-- (through Wanderer: the settings drawn again with the new cap)
+					if gold and gold >= 1 then W.ChangeEverywhere(function() ns.BuyCap(gold) end) end
+				end)
+			end), enabled, function() return on() and ns.AutoBuy() end)
 			-- At the banker: what the list lacks, taken from the bank first (off), for this character.
 			o.Under(o.Toggle("AUCTION_FROMBANK", L.FROMBANK .. " " .. L.THIS_CHARACTER, L.FROMBANK_DESC, false, function() return ns.FromBank() end,
 				function(value) ns.FromBank(value) end), enabled, on)

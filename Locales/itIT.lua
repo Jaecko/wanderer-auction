@@ -272,4 +272,5 @@ ns.LOCALES.itIT = {
 		BID_MINIMUM = "Offerta minima",
 		BID_YOURS = "La tua, la più alta",
 		KIND_SALE_BID = "Tua vendita, con offerta",
+		AUTOBUY_CAP = "Spesa massima per visita",
 }

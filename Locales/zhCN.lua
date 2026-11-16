@@ -272,4 +272,5 @@ ns.LOCALES.zhCN = {
 		BID_MINIMUM = "最低出价",
 		BID_YOURS = "你的出价，最高",
 		KIND_SALE_BID = "你的拍卖，已有出价",
+		AUTOBUY_CAP = "每次光顾的最高花费",
 }

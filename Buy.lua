@@ -987,7 +987,11 @@ local function Build(page)
 		row.bidWhat:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 8 + QTY_WIDTH + 160, 2)
 		row.time = Skin.Text(row, "GameTooltipTextSmall", "muted")
 		row.time:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-		row:SetScript("OnClick", function(self) if self.entry then ChooseAuction(self.entry) end end)
+		-- (the game's own modified clicks first: Shift links it in the chat, Ctrl tries it on)
+		row:SetScript("OnClick", function(self)
+			if not self.entry or (U.ItemClick and U.ItemClick(self.entry.link or (chosen and chosen.link))) then return end
+			ChooseAuction(self.entry)
+		end)
 		Skin.ItemTooltip(row, function(self) return self.entry and self.entry.link end)
 		detail.auctionRows[index] = row
 	end

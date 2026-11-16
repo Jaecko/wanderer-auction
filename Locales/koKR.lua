@@ -272,4 +272,5 @@ ns.LOCALES.koKR = {
 		BID_MINIMUM = "최소 입찰가",
 		BID_YOURS = "내 입찰, 최고가",
 		KIND_SALE_BID = "내 판매, 입찰 있음",
+		AUTOBUY_CAP = "방문당 최대 지출",
 }
