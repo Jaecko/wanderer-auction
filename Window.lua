@@ -268,6 +268,28 @@ function ns.KeyLabel(button, word, main)
 	label:SetAlpha(main and 0.8 or 0.6)
 	label:SetText(word or "")
 	button.keyLabel = label
+	-- (its words on the left, the key on the right: never on top of each other, in either look)
+	local caption = button.caption or (button.GetFontString and button:GetFontString())
+	if type(caption) == "table" and caption.ClearAllPoints then
+		local function Place(dx, dy)
+			caption:ClearAllPoints()
+			caption:SetPoint("LEFT", button, "LEFT", 14 + dx, dy)
+		end
+		Place(0, 0)
+		if caption.SetJustifyH then caption:SetJustifyH("LEFT") end
+		-- (Wanderer's button presses its words to the middle: pressed here where they stand; the game's moves them itself)
+		if not (Skin.GameWindows and Skin.GameWindows()) then
+			button:SetScript("OnMouseDown", function(self)
+				if not self:IsEnabled() then return end
+				Place(1, -1)
+				if self.ground then self.ground:SetVertexColor(0.8, 0.8, 0.8) end
+			end)
+			button:SetScript("OnMouseUp", function(self)
+				Place(0, 0)
+				if self.ground then self.ground:SetVertexColor(1, 1, 1) end
+			end)
+		end
+	end
 	return label
 end
 
