@@ -784,13 +784,15 @@ local function Build(page)
 	-- The price.
 	local priceCaps = Skin.Caps(frame, L.SELL_PRICE_EACH)
 	priceCaps:SetPoint("TOPLEFT", detail.icon, "BOTTOMLEFT", 0, -22)
-	detail.priceBox = ns.PriceBox(frame, { width = 220, height = 40, big = true, tip = L.PRICE_TIP,
-		onChange = function(copper)
-			detail.price, detail.typed = Keep(copper), true
-			UpdateSale()
-			DrawLevels()
-		end })
+	local function PriceChosen(copper)
+		detail.price, detail.typed = Keep(copper), true
+		UpdateSale()
+		DrawLevels()
+	end
+	detail.priceBox = ns.PriceBox(frame, { width = 220, height = 40, big = true, tip = L.PRICE_TIP, onChange = PriceChosen })
 	detail.priceBox:SetPoint("TOPLEFT", priceCaps, "BOTTOMLEFT", 0, -6)
+	-- (a controller: nothing typed, the cross steps the price, as the bid on the Buy page)
+	ns.PadSteps(detail.priceBox, L.SELL_PRICE_EACH, nil, PriceChosen)
 	detail.why = Skin.Text(frame, "GameTooltipTextSmall", "kicker")
 	detail.why:SetPoint("TOPLEFT", detail.priceBox, "BOTTOMLEFT", 0, -6)
 	detail.why:SetPoint("RIGHT", frame, "RIGHT", 0, 0)

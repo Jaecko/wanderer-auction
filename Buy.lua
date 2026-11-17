@@ -354,8 +354,9 @@ end
 local function Wanted()
 	if not chosen then return 1 end
 	if detail.want == "all" then
+		-- (nothing left on sale: none to buy)
 		local _, available = Cost(0)
-		return math.max(1, available)
+		return math.max(0, available)
 	end
 	return math.max(1, tonumber(detail.want) or 1)
 end
@@ -364,6 +365,11 @@ local function UpdateCommodity()
 	if not (chosen and chosen.commodity) then return end
 	local quantity = Wanted()
 	local total, available, enough, top = Cost(quantity)
+	detail.noneLeft = nil
+	if quantity < 1 then
+		-- ("all" with nothing left: no purchase of one, the button off and its tooltip says why)
+		enough, detail.noneLeft = false, true
+	end
 	local full = Clean(Safe(AH.HasFullCommoditySearchResults, chosen.id))
 	if not enough and not full and not chosen.askedMore then
 		-- Not all of them came yet: the rest asked (once until it comes), the total said after.
@@ -380,7 +386,7 @@ local function UpdateCommodity()
 	for _, button in ipairs(detail.amounts.buttons) do barWidth = barWidth + (button:GetWidth() or 56) + 3 end
 	detail.amounts:SetWidth(barWidth)
 	detail.total.label:SetText(L.TOTAL_FOR:format(quantity))
-	detail.total.value:SetText(enough and U.Coins(total) or Skin.Colorize(L.NOT_ENOUGH, "bad"))
+	detail.total.value:SetText(enough and U.Coins(total) or Skin.Colorize(detail.noneLeft and L.SEARCH_NONE or L.NOT_ENOUGH, "bad"))
 	detail.average.value:SetText(enough and U.Coins(math.floor(total / quantity)) or "")
 	detail.top.value:SetText(enough and U.Coins(top) or "")
 	buttons.buy:SetEnabled(enough and quantity > 0)
@@ -469,8 +475,10 @@ local function UpdateItem()
 end
 
 local function ChooseAuction(entry)
+	-- (the same auction come again, refreshed: the bid you chose kept while the auction still takes it)
+	local same = entry and auction and entry.id ~= nil and entry.id == auction.id
 	auction = entry
-	if entry and entry.minBid then detail.bidMoney:Set(entry.minBid) end
+	if entry and entry.minBid and not (same and detail.bidMoney:Get() >= entry.minBid) then detail.bidMoney:Set(entry.minBid) end
 	DrawAuctions()
 	UpdateItem()
 end
@@ -536,7 +544,7 @@ function Choose(entry, mouse)
 		detail.commodity:SetShown(entry.commodity)
 		detail.item:SetShown(not entry.commodity)
 		buttons.bid:SetShown(not entry.commodity)
-		detail.want = 1
+		detail.want, detail.noneLeft = 1, nil
 		detail.amounts:Select(1)
 		detail.amount:SetText("")
 		detail.bidMoney:Set(0)
@@ -555,6 +563,7 @@ local function Buy()
 	local name = chosen.link or chosen.name
 	if chosen.commodity then
 		local quantity = Wanted()
+		if quantity < 1 then return end
 		-- The game tells the final price first (COMMODITY_PRICE_UPDATED), then you agree.
 		buying = { id = chosen.id, quantity = quantity, name = name }
 		Safe(AH.StartCommoditiesPurchase, chosen.id, quantity)
@@ -582,7 +591,7 @@ end
 -- On your shopping list: a commodity by the quantity asked, an item once.
 local function ToShopping()
 	if not chosen then return end
-	ns.AddToShopping(chosen.id, chosen.commodity and Wanted() or 1)
+	ns.AddToShopping(chosen.id, chosen.commodity and math.max(1, Wanted()) or 1)
 end
 
 -- The page --------------------------------------------------------------------------------------------------
@@ -896,6 +905,10 @@ local function Build(page)
 	-- The buttons, at the bottom: to your shopping list, a bid (an item), the purchase.
 	buttons.buy = Skin.Button(main, L.BUY, Buy, "main", 130)
 	buttons.buy:SetPoint("BOTTOMRIGHT")
+	-- (off for a commodity's "all" with nothing left: said why)
+	Skin.Tooltip(buttons.buy, function()
+		return detail.noneLeft and chosen and chosen.commodity and detail.commodity:IsShown() and L.SEARCH_NONE or nil
+	end, "ANCHOR_TOP")
 	buttons.bid = Skin.Button(main, L.BID_BUTTON, Bid, nil, 100)
 	buttons.bid:SetHeight(36)
 	buttons.bid:SetPoint("RIGHT", buttons.buy, "LEFT", -8, 0)
