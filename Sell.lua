@@ -635,13 +635,15 @@ local function SendSale(sale)
 	-- (the game asks its own question for a price far below the market: its confirmation posts exactly this)
 	if Clean(needsConfirmation) then
 		Skin.Ask(L.CONFIRM, function()
+			-- (the game's answer waited for from the yes: a slow yes never gives the button back before it)
+			sale.at = GetTime()
 			if sale.commodity then
 				Safe(AH.ConfirmPostCommodity, sale.location, sale.duration, sale.quantity, sale.unit)
 			else
 				Safe(AH.ConfirmPostItem, sale.location, sale.duration, sale.quantity, sale.bid, sale.unit)
 			end
 		end, function()
-			posting = nil
+			if posting == sale then posting = nil end
 			UpdateSale()
 		end)
 	end
