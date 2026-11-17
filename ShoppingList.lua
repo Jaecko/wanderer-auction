@@ -81,8 +81,14 @@ local function Create()
 	window:SetSize(WIDTH, HEIGHT)
 	local _, title, margin = Skin.Header(window, "Wanderer", L.SHOPPING, { settings = "ext:auction" })
 	local intro = Skin.Text(window, "GameTooltipTextSmall", "muted")
-	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-	intro:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+	-- (the game look: the title in the game's bar, the intro in its place, left of the cog)
+	if Skin.GameWindows and Skin.GameWindows() then
+		intro:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -8)
+		intro:SetPoint("RIGHT", window, "RIGHT", -(margin + 20), 0)
+	else
+		intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+		intro:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+	end
 	intro:SetJustifyH("LEFT")
 	intro:SetText(L.LIST_INTRO)
 	window.intro = intro

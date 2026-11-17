@@ -170,12 +170,17 @@ function Create()
 		Choose(false)
 		ns.UseGame()
 	end, L.GAME_WINDOW_DESC)
-	game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 54), -margin + 2)
+	-- (the game look: the heading in the game's bar; the button level with the cog, left of the page's "?" (18)
+	-- by it; the tabs under that line, all higher by the title's room)
+	local gameLook = Skin.GameWindows and Skin.GameWindows()
+	local cog = gameLook and window.cog
+	if cog then game:SetPoint("RIGHT", cog, "LEFT", -(2 + 18 + 6), 0)
+	else game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 54), -margin + 2) end
 	money = Skin.Text(window, "GameTooltipText", "soft")
 	money:SetPoint("RIGHT", game, "LEFT", -18, 0)
 	-- The tabs, in a row, the one shown underlined.
 	local rule = Skin.Rule(window)
-	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 68))
+	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + (gameLook and 44 or 68)))
 	rule:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	local list = {}
 	for _, name in ipairs(order) do list[#list + 1] = { name, pages[name].label } end
