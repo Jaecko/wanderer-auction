@@ -199,7 +199,7 @@ end
 local READ_MOST = 500
 local function ReadLevels(entry)
 	local byPrice, levels = {}, {}
-	local function Add(price, count, mine, owners)
+	local function Add(price, count, mine, owners, total)
 		if not (price and price > 0) then return end
 		local level = byPrice[price]
 		if not level then
@@ -209,20 +209,28 @@ local function ReadLevels(entry)
 		end
 		level.count = level.count + (count or 1)
 		level.mine = level.mine or (mine and true or false)
-		if mine then return end
-		-- (an item's sellers by name, each once; else each listing)
-		local named = false
+		-- The sellers of others: the game gives one line per price for a commodity (all its sellers together, their
+		-- number said), and an item's lines with their sellers' names (each counted once over the lines).
+		local me = Clean(Safe(UnitName, "player"))
+		local named = 0
 		for _, owner in ipairs(type(owners) == "table" and owners or {}) do
 			owner = Clean(owner)
-			if type(owner) == "string" and owner ~= "" then
-				named = true
+			if type(owner) == "string" and owner ~= "" and owner ~= me then
+				named = named + 1
 				if not level.sellers[owner] then
 					level.sellers[owner] = true
 					level.offers = level.offers + 1
 				end
 			end
 		end
-		if not named then level.offers = level.offers + 1 end
+		local sellers = Clean(total)
+		if type(sellers) == "number" then
+			-- (yours among them is not counted; the ones not named come on top of the named)
+			local others = math.max(sellers - (mine and 1 or 0), 0)
+			level.offers = level.offers + math.max(others - named, 0)
+		elseif named == 0 and not mine then
+			level.offers = level.offers + 1
+		end
 	end
 	if entry.commodity then
 		local count = Clean(Safe(AH.GetNumCommoditySearchResults, entry.id)) or 0
@@ -230,7 +238,7 @@ local function ReadLevels(entry)
 			local result = Safe(AH.GetCommoditySearchResultInfo, entry.id, index)
 			if type(result) == "table" then
 				Add(Clean(result.unitPrice), Clean(result.quantity) or 1,
-					Clean(result.containsOwnerItem) or (Clean(result.numOwnerItems) or 0) > 0)
+					Clean(result.containsOwnerItem) or (Clean(result.numOwnerItems) or 0) > 0, result.owners, result.totalNumberOfOwners)
 			end
 		end
 	elseif entry.key then
@@ -241,7 +249,8 @@ local function ReadLevels(entry)
 				local buyout, quantity = Clean(result.buyoutAmount), Clean(result.quantity) or 1
 				-- (an auction without a buyout cannot be bought at once: left out)
 				if buyout and buyout > 0 then
-					Add(math.floor(buyout / math.max(1, quantity)), quantity, Clean(result.containsOwnerItem), result.owners)
+					Add(math.floor(buyout / math.max(1, quantity)), quantity, Clean(result.containsOwnerItem), result.owners,
+						result.totalNumberOfOwners)
 				end
 			end
 		end
