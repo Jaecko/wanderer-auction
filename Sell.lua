@@ -30,6 +30,10 @@ local SILVER = rawget(_G, "COPPER_PER_SILVER") or 100
 -- When a lone cheap offer is passed by: it holds this share of what is for sale or less, and the next price is
 -- this much higher or more. Placed then this share of the gap under the next price.
 ns.LONE_SHARE, ns.GAP_JUMP, ns.GAP_PLACE = 0.05, 1.15, 0.3
+-- A cheap price held by this many listings or fewer (all of them together) is not followed when the next price
+-- has at least LURE_CROWD listings and LURE_REST or more stand from there on: one seller with a big stack under
+-- everyone, often there to make the others sell lower, then buy and sell again dearer.
+ns.LURE_MOST, ns.LURE_CROWD, ns.LURE_REST = 2, 2, 4
 
 local list, levelsList, entries, selected = nil, nil, {}, nil
 local detail = {}
@@ -190,20 +194,35 @@ local function Deposit(entry, duration, quantity)
 	return Clean(Safe(AH.CalculateItemDeposit, entry.location, duration, quantity))
 end
 
--- What is for sale now, one line per price, cheapest first: { price (each), count, mine }.
+-- What is for sale now, one line per price, cheapest first: { price (each), count, mine, offers }. offers: the
+-- listings of others at that price (for an item, its sellers when the game names them).
 local READ_MOST = 500
 local function ReadLevels(entry)
 	local byPrice, levels = {}, {}
-	local function Add(price, count, mine)
+	local function Add(price, count, mine, owners)
 		if not (price and price > 0) then return end
 		local level = byPrice[price]
 		if not level then
-			level = { price = price, count = 0, mine = false }
+			level = { price = price, count = 0, mine = false, offers = 0, sellers = {} }
 			byPrice[price] = level
 			levels[#levels + 1] = level
 		end
 		level.count = level.count + (count or 1)
 		level.mine = level.mine or (mine and true or false)
+		if mine then return end
+		-- (an item's sellers by name, each once; else each listing)
+		local named = false
+		for _, owner in ipairs(type(owners) == "table" and owners or {}) do
+			owner = Clean(owner)
+			if type(owner) == "string" and owner ~= "" then
+				named = true
+				if not level.sellers[owner] then
+					level.sellers[owner] = true
+					level.offers = level.offers + 1
+				end
+			end
+		end
+		if not named then level.offers = level.offers + 1 end
 	end
 	if entry.commodity then
 		local count = Clean(Safe(AH.GetNumCommoditySearchResults, entry.id)) or 0
@@ -221,14 +240,34 @@ local function ReadLevels(entry)
 			if type(result) == "table" then
 				local buyout, quantity = Clean(result.buyoutAmount), Clean(result.quantity) or 1
 				-- (an auction without a buyout cannot be bought at once: left out)
-				if buyout and buyout > 0 then Add(math.floor(buyout / math.max(1, quantity)), quantity, Clean(result.containsOwnerItem)) end
+				if buyout and buyout > 0 then
+					Add(math.floor(buyout / math.max(1, quantity)), quantity, Clean(result.containsOwnerItem), result.owners)
+				end
 			end
 		end
 	end
 	table.sort(levels, function(a, b) return a.price < b.price end)
+	for _, level in ipairs(levels) do level.sellers = nil end
 	return levels
 end
 ns.ReadLevels = ReadLevels
+
+-- The cheapest price held by enough listings, when the ones under it are only one or two (a lure), else nil.
+-- others: the levels of others a merchant does not beat, cheapest first.
+local function Crowded(others)
+	local before, rest = 0, 0
+	for _, level in ipairs(others) do
+		if not level.offers then return nil end -- (listings unknown: nothing passed by)
+		rest = rest + level.offers
+	end
+	for index, level in ipairs(others) do
+		if index > 1 and level.offers >= ns.LURE_CROWD and rest >= ns.LURE_REST then return level end
+		before, rest = before + level.offers, rest - level.offers
+		if before > ns.LURE_MOST then return nil end
+		if index == 1 and level.offers >= ns.LURE_CROWD then return nil end
+	end
+	return nil
+end
 
 -- The place advised: a price, and how it was found ("yours", "match", "between", "low", "memory"), or nil.
 -- levels nil: not looked yet; {}: nobody sells it.
@@ -249,6 +288,12 @@ function ns.Advise(entry, levels)
 	end
 	if not first then return least > 0 and least or nil, "low" end
 	if first.mine then return math.max(Keep(first.price), least), "yours" end
+	local others = {}
+	for index = firstIndex, #levels do
+		if not levels[index].mine then others[#others + 1] = levels[index] end
+	end
+	local crowd = Crowded(others)
+	if crowd then return math.max(Keep(crowd.price), least), "crowd" end
 	local nextOne
 	for index = firstIndex + 1, #levels do
 		if not levels[index].mine then
@@ -405,7 +450,7 @@ local function Duration()
 	return (duration == 1 or duration == 3) and duration or 2
 end
 
-local WHY = { yours = "WHY_YOURS", match = "WHY_MATCH", between = "WHY_BETWEEN", low = "WHY_LOW", memory = "WHY_MEMORY" }
+local WHY = { yours = "WHY_YOURS", match = "WHY_MATCH", crowd = "WHY_CROWD", between = "WHY_BETWEEN", low = "WHY_LOW", memory = "WHY_MEMORY" }
 function UpdateSale()
 	if not (selected and detail.frame) then return end
 	local quantity, most = Quantity()
@@ -490,8 +535,8 @@ function DrawLevels()
 	wipe(levelRows)
 	local entry = selected
 	local levels = entry and entry.levels
-	local advised
-	if entry and levels then advised = ns.Advise(entry, levels) end
+	local advised, how
+	if entry and levels then advised, how = ns.Advise(entry, levels) end
 	for _, level in ipairs(levels or {}) do levelRows[#levelRows + 1] = level end
 	if advised and levels and levels[1] then
 		local there = false
@@ -513,8 +558,12 @@ function DrawLevels()
 			level.name = U.Coins(level.price, low and Skin.COLORS.muted or nil)
 			level.color = low and Skin.COLORS.muted or (level.gap and Skin.COLORS.gold) or nil
 			level.quality = 1
-			level.tip = low and L.TIP_UNDER_MERCHANT:format(U.Coins(Vendor(entry))) or nil
-			row:Fill(level, level.price == detail.price, { count = level.gap and "-" or tostring(level.count), tag = tag })
+			-- (the few listings passed by under the advised price: said why on the pointer)
+			local lure = how == "crowd" and not low and not level.mine and not level.gap and level.price < advised
+			level.tip = low and L.TIP_UNDER_MERCHANT:format(U.Coins(Vendor(entry))) or lure and L.TIP_LURE or nil
+			row:Fill(level, level.price == detail.price, { count = level.gap and "-" or tostring(level.count),
+				offers = (level.gap or not level.offers) and "-" or tostring(level.offers), tag = tag })
+			row.cells.offers:SetTextColor(Skin.RGB((low or lure) and "muted" or "soft"))
 			row.cells.tag:SetTextColor(Skin.RGB(tagRole))
 			row.cells.count:SetTextColor(Skin.RGB(low and "muted" or "soft"))
 		else
@@ -706,7 +755,8 @@ local function Build(page)
 		nameTitle = L.LEVEL_PRICE, width = LEVELS_WIDTH, rows = 16, icon = false, rowHeight = Skin.ROW and Skin.ROW.normal or 34,
 		onDraw = function() DrawLevels() end,
 		onClick = function(level) SetPrice(level.price) end,
-		columns = { { key = "count", title = L.LEVEL_COUNT, width = 58 }, { key = "tag", title = "", width = 92 } },
+		columns = { { key = "count", title = L.LEVEL_COUNT, width = 54 }, { key = "offers", title = L.LEVEL_OFFERS, width = 62 },
+			{ key = "tag", title = "", width = 78 } },
 	})
 	levelsList:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, -22)
 	levelsList:Hide()

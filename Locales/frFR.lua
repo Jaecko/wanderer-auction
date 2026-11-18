@@ -222,7 +222,7 @@ ns.LOCALES.frFR = {
 		LEVELS_TITLE = "En vente maintenant",
 		LEVEL_PRICE = "Prix à l'unité",
 		LEVEL_COUNT = "En vente",
-		LEVELS_HINT = "Un clic sur une ligne place le vôtre à ce prix. En gris : un marchand en donne plus, mais vous pouvez quand même.",
+		LEVELS_HINT = "Un clic sur une ligne place le vôtre à ce prix. Annonces : combien de vendeurs à ce prix. En gris : un marchand en donne plus, mais vous pouvez quand même.",
 		TAG_YOU = "vous",
 		TAG_MERCHANT = "marchand +",
 		TAG_ADVISED = "conseillé",
@@ -273,4 +273,7 @@ ns.LOCALES.frFR = {
 		BID_YOURS = "La vôtre, la plus haute",
 		KIND_SALE_BID = "Votre vente, avec enchère",
 		AUTOBUY_CAP = "Dépense maximale par visite",
+		LEVEL_OFFERS = "Annonces",
+		WHY_CROWD = "Conseillé : le prix le plus bas tenu par plusieurs vendeurs. En dessous, une ou deux annonces seules : pas suivies.",
+		TIP_LURE = "Une ou deux annonces seules à ce prix : souvent un appât pour vous faire vendre moins cher. Pas suivi.",
 }

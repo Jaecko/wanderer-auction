@@ -222,7 +222,7 @@ ns.LOCALES.zhCN = {
 		LEVELS_TITLE = "当前在售",
 		LEVEL_PRICE = "单价",
 		LEVEL_COUNT = "在售",
-		LEVELS_HINT = "点击一行即以该价格上架。灰色：商人给得更多，但仍可选择。",
+		LEVELS_HINT = "点击一行即按该价格出售。挂单：该价格的卖家数量。灰色：商人给得更多，仍可选择。",
 		TAG_YOU = "你",
 		TAG_MERCHANT = "商人更高",
 		TAG_ADVISED = "推荐",
@@ -273,4 +273,7 @@ ns.LOCALES.zhCN = {
 		BID_YOURS = "你的出价，最高",
 		KIND_SALE_BID = "你的拍卖，已有出价",
 		AUTOBUY_CAP = "每次光顾的最高花费",
+		LEVEL_OFFERS = "挂单",
+		WHY_CROWD = "建议：多位卖家共同挂出的最低价格。更低的价格只有一两笔挂单：不跟随。",
+		TIP_LURE = "此价格只有一两笔挂单：常是诱你降价的诱饵。不跟随。",
 }

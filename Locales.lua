@@ -225,7 +225,7 @@ local LOCALES = {
 		LEVELS_TITLE = "For sale now",
 		LEVEL_PRICE = "Price each",
 		LEVEL_COUNT = "On sale",
-		LEVELS_HINT = "Click a line to place yours at that price. Grey: a merchant gives more, still yours to choose.",
+		LEVELS_HINT = "Click a line to place yours at that price. Listings: how many sellers at that price. Grey: a merchant gives more, still yours to choose.",
 		TAG_YOU = "you",
 		TAG_MERCHANT = "merchant +",
 		TAG_ADVISED = "advised",
@@ -276,6 +276,9 @@ local LOCALES = {
 		BID_YOURS = "Yours, the highest",
 		KIND_SALE_BID = "Your sale, bid on",
 		AUTOBUY_CAP = "Most spent per visit",
+		LEVEL_OFFERS = "Listings",
+		WHY_CROWD = "Advised: the cheapest price several sellers hold. Under it, one or two listings alone: not followed.",
+		TIP_LURE = "One or two listings alone at this price: often a lure to make you sell lower. Not followed.",
 	},
 }
 -- The client's language comes in its own file, loaded after this one (Locales/<code>.lua).

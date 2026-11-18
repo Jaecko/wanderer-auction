@@ -222,7 +222,7 @@ ns.LOCALES.esES = {
 		LEVELS_TITLE = "En venta ahora",
 		LEVEL_PRICE = "Precio por unidad",
 		LEVEL_COUNT = "En venta",
-		LEVELS_HINT = "Un clic en una línea pone el tuyo a ese precio. En gris: un mercader da más, pero puedes elegirlo.",
+		LEVELS_HINT = "Un clic en una línea pone el tuyo a ese precio. Anuncios: cuántos vendedores a ese precio. En gris: un mercader da más, aun así puedes elegirlo.",
 		TAG_YOU = "tú",
 		TAG_MERCHANT = "mercader +",
 		TAG_ADVISED = "aconsejado",
@@ -273,4 +273,7 @@ ns.LOCALES.esES = {
 		BID_YOURS = "La tuya, la más alta",
 		KIND_SALE_BID = "Tu venta, con puja",
 		AUTOBUY_CAP = "Gasto máximo por visita",
+		LEVEL_OFFERS = "Anuncios",
+		WHY_CROWD = "Aconsejado: el precio más bajo que mantienen varios vendedores. Por debajo, uno o dos anuncios solos: no se siguen.",
+		TIP_LURE = "Uno o dos anuncios solos a este precio: a menudo un cebo para que vendas más barato. No se sigue.",
 }

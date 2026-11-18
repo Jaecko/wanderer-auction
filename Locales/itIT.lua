@@ -222,7 +222,7 @@ ns.LOCALES.itIT = {
 		LEVELS_TITLE = "In vendita ora",
 		LEVEL_PRICE = "Prezzo cadauno",
 		LEVEL_COUNT = "In vendita",
-		LEVELS_HINT = "Un clic su una riga mette il tuo a quel prezzo. In grigio: un mercante dà di più, ma puoi sceglierlo.",
+		LEVELS_HINT = "Un clic su una riga mette il tuo a quel prezzo. Annunci: quanti venditori a quel prezzo. In grigio: un mercante dà di più, puoi sceglierlo comunque.",
 		TAG_YOU = "tu",
 		TAG_MERCHANT = "mercante +",
 		TAG_ADVISED = "consigliato",
@@ -273,4 +273,7 @@ ns.LOCALES.itIT = {
 		BID_YOURS = "La tua, la più alta",
 		KIND_SALE_BID = "Tua vendita, con offerta",
 		AUTOBUY_CAP = "Spesa massima per visita",
+		LEVEL_OFFERS = "Annunci",
+		WHY_CROWD = "Consigliato: il prezzo più basso tenuto da più venditori. Sotto, uno o due annunci soli: non seguiti.",
+		TIP_LURE = "Uno o due annunci soli a questo prezzo: spesso un'esca per farti vendere a meno. Non seguito.",
 }
