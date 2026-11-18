@@ -199,6 +199,15 @@ end
 local READ_MOST = 500
 local function ReadLevels(entry)
 	local byPrice, levels = {}, {}
+	-- (a debug session: the game's first lines as they come, their sellers too)
+	local function Row(index, result)
+		if not ns.debugging or index > 20 then return end
+		local names = {}
+		for _, owner in ipairs(type(result.owners) == "table" and result.owners or {}) do names[#names + 1] = tostring(Clean(owner)) end
+		ns.Debug("sell row", { index = index, unit = Clean(result.unitPrice), buyout = Clean(result.buyoutAmount),
+			quantity = Clean(result.quantity), owners = table.concat(names, ","), total = Clean(result.totalNumberOfOwners),
+			ownItems = Clean(result.numOwnerItems), mine = Clean(result.containsOwnerItem), auction = Clean(result.auctionID) })
+	end
 	local function Add(price, count, mine, owners, total)
 		if not (price and price > 0) then return end
 		local level = byPrice[price]
@@ -237,6 +246,7 @@ local function ReadLevels(entry)
 		for index = 1, math.min(count, READ_MOST) do
 			local result = Safe(AH.GetCommoditySearchResultInfo, entry.id, index)
 			if type(result) == "table" then
+				Row(index, result)
 				Add(Clean(result.unitPrice), Clean(result.quantity) or 1,
 					Clean(result.containsOwnerItem) or (Clean(result.numOwnerItems) or 0) > 0, result.owners, result.totalNumberOfOwners)
 			end
@@ -246,6 +256,7 @@ local function ReadLevels(entry)
 		for index = 1, math.min(count, READ_MOST) do
 			local result = Safe(AH.GetItemSearchResultInfo, entry.key, index)
 			if type(result) == "table" then
+				Row(index, result)
 				local buyout, quantity = Clean(result.buyoutAmount), Clean(result.quantity) or 1
 				-- (an auction without a buyout cannot be bought at once: left out)
 				if buyout and buyout > 0 then
