@@ -1,10 +1,10 @@
 # Wanderer Auction 1.3.13
 
 ### Added
-- Selling: each price line says how many other sellers stand at it.
+- Selling: how many others sell at the cheapest price, next to the usual price.
 
 ### Changed
-- The advised price no longer follows a cheap price held by one or two sellers alone when several sellers stand just above (often a lure to make you sell lower).
+- The advised price no longer follows a cheapest price held by one or two sellers alone when enough prices stand above (often a lure to make you sell lower): the next price instead.
 
 # Wanderer Auction 1.3.11
 
